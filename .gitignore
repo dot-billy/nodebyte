@@ -1,0 +1,30 @@
+# Environment files
+.env
+backend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+
+# Build artifacts
+frontend/public/downloads/
+*.tar.gz
+
+# IDE / editor
+.cursor/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

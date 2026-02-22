@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      width: 380px;
+      background: #fff;
+      color: #1a1a2e;
+      font-size: 13px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    .header h1 { font-size: 15px; font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 6px; }
+
+    /* Team switcher */
+    .team-switcher {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .team-switcher select {
+      appearance: none;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 22px 3px 8px;
+      border-radius: 99px;
+      cursor: pointer;
+      outline: none;
+      font-family: inherit;
+      max-width: 140px;
+    }
+    .team-switcher select:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+    .team-switcher::after {
+      content: "▾";
+      position: absolute;
+      right: 7px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 9px;
+      color: #3b82f6;
+      pointer-events: none;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    .tab {
+      flex: 1;
+      padding: 8px 0;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: inherit;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab:hover { color: #374151; }
+    .tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+
+    /* Content */
+    .content { padding: 14px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Fields */
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      background: #fff;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+    .field textarea { resize: vertical; min-height: 40px; }
+
+    .row { display: flex; gap: 8px; }
+    .row .field { flex: 1; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-family: inherit;
+    }
+    .btn-primary { background: #1a1a2e; color: #fff; width: 100%; }
+    .btn-primary:hover { background: #2d2d4a; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-small { padding: 4px 10px; font-size: 11px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+    .btn-small:hover { background: #e5e7eb; }
+    .btn-danger { background: transparent; color: #ef4444; border: 1px solid #fecaca; padding: 4px 10px; font-size: 11px; }
+    .btn-danger:hover { background: #fef2f2; }
+
+    /* Messages */
+    .msg { padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+    .msg-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .msg-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+    /* Login */
+    .login-container { padding: 24px 16px; }
+    .login-container h2 { font-size: 16px; margin-bottom: 4px; }
+    .login-container p { font-size: 12px; color: #6b7280; margin-bottom: 16px; }
+
+    /* Site preview */
+    .site-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .site-preview img { width: 18px; height: 18px; border-radius: 3px; }
+    .site-preview-text { min-width: 0; flex: 1; }
+    .site-preview-title { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .site-preview-url { font-size: 10px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Nodes list */
+    .nodes-search {
+      width: 100%;
+      padding: 7px 10px 7px 30px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") 9px center no-repeat;
+      margin-bottom: 10px;
+    }
+    .nodes-search:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+
+    .nodes-list {
+      max-height: 320px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .nodes-list:empty::after {
+      content: "No nodes found.";
+      display: block;
+      padding: 24px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 12px;
+    }
+
+    .node-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #f3f4f6;
+      cursor: default;
+      transition: background 0.1s;
+    }
+    .node-item:last-child { border-bottom: none; }
+    .node-item:hover { background: #f9fafb; }
+    .node-item-info { flex: 1; min-width: 0; }
+    .node-item-name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-item-detail { font-size: 10px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .node-item a.node-item-name {
+      color: #1d4ed8;
+      text-decoration: none;
+    }
+    .node-item a.node-item-name:hover { text-decoration: underline; }
+
+    .kind-badge {
+      display: inline-flex;
+      padding: 1px 6px;
+      border-radius: 99px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .kind-site { background: #dbeafe; color: #1e40af; }
+    .kind-service { background: #fce7f3; color: #9d174d; }
+    .kind-device { background: #d1fae5; color: #065f46; }
+    .kind-other { background: #f3f4f6; color: #4b5563; }
+
+    .nodes-count { font-size: 11px; color: #9ca3af; margin-top: 8px; text-align: center; }
+    .nodes-loading { padding: 32px; text-align: center; color: #9ca3af; font-size: 12px; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Login View -->
+  <div id="view-login" class="login-container hidden">
+    <h2>Sign in to Nodebyte</h2>
+    <p>Connect this extension to your Nodebyte account.</p>
+    <div id="login-error" class="msg msg-error hidden"></div>
+    <div class="field">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" />
+    </div>
+    <button class="btn btn-primary" id="btn-login">Sign in</button>
+    <div style="margin-top:12px;text-align:center">
+      <button class="btn btn-small" id="btn-open-settings">Settings</button>
+    </div>
+  </div>
+
+  <!-- Main View (logged in) -->
+  <div id="view-main" class="hidden">
+    <div class="header">
+      <h1>Nodebyte</h1>
+      <div class="header-right">
+        <div class="team-switcher">
+          <select id="team-select"></select>
+        </div>
+        <button class="btn btn-small" id="btn-settings" title="Settings">⚙</button>
+        <button class="btn btn-danger" id="btn-logout">Logout</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="add">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-1px;margin-right:3px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add
+      </button>
+      <button class="tab" data-tab="nodes">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-1px;margin-right:3px"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Nodes
+      </button>
+    </div>
+
+    <!-- Add tab -->
+    <div id="tab-add" class="tab-content active">
+      <div class="content">
+        <div id="main-msg" class="msg hidden"></div>
+
+        <div id="site-preview" class="site-preview">
+          <img id="site-favicon" src="" alt="" />
+          <div class="site-preview-text">
+            <div class="site-preview-title" id="site-title"></div>
+            <div class="site-preview-url" id="site-url"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="node-name">Name</label>
+            <input type="text" id="node-name" placeholder="e.g. Company Blog" />
+          </div>
+          <div class="field" style="flex:0 0 100px">
+            <label for="node-kind">Kind</label>
+            <select id="node-kind">
+              <option value="site">Site</option>
+              <option value="service">Service</option>
+              <option value="device">Device</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="node-tags">Tags (comma separated)</label>
+          <input type="text" id="node-tags" placeholder="production, marketing" />
+        </div>
+
+        <div class="field">
+          <label for="node-notes">Notes</label>
+          <textarea id="node-notes" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+
+        <button class="btn btn-primary" id="btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add to Nodebyte
+        </button>
+      </div>
+    </div>
+
+    <!-- Nodes tab -->
+    <div id="tab-nodes" class="tab-content">
+      <div class="content">
+        <input type="text" class="nodes-search" id="nodes-search" placeholder="Search nodes..." />
+        <div id="nodes-loading" class="nodes-loading">Loading nodes...</div>
+        <div id="nodes-list" class="nodes-list hidden"></div>
+        <div id="nodes-count" class="nodes-count hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
