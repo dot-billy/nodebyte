@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Trash2, Users, Server } from "lucide-react";
+import { Search, Trash2, Users, Server, Plus } from "lucide-react";
 
 import { api, type AdminTeamRow } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { AdminTeamDialog } from "@/components/admin-team-dialog";
 
 export default function AdminTeamsPage() {
   const [teams, setTeams] = useState<AdminTeamRow[]>([]);
@@ -14,6 +15,10 @@ export default function AdminTeamsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"create" | "detail">("create");
+  const [dialogTeamId, setDialogTeamId] = useState<string | undefined>();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -31,6 +36,18 @@ export default function AdminTeamsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  function openCreate() {
+    setDialogMode("create");
+    setDialogTeamId(undefined);
+    setDialogOpen(true);
+  }
+
+  function openDetail(teamId: string) {
+    setDialogMode("detail");
+    setDialogTeamId(teamId);
+    setDialogOpen(true);
+  }
+
   async function deleteTeam(t: AdminTeamRow) {
     if (!confirm(`Delete team "${t.name}" and all its data? This cannot be undone.`)) return;
     setBusy(t.id);
@@ -43,11 +60,17 @@ export default function AdminTeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Teams</h1>
-        <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-          Manage all teams across the platform.
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Teams</h1>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            Manage all teams across the platform.
+          </p>
+        </div>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Team
+        </Button>
       </div>
 
       <div className="relative max-w-sm">
@@ -83,8 +106,8 @@ export default function AdminTeamsPage() {
             </thead>
             <tbody>
               {teams.map((t) => (
-                <tr key={t.id} className="border-b border-[hsl(var(--border))] last:border-0">
-                  <td className="px-4 py-3">
+                <tr key={t.id} className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--muted))]/50 transition-colors">
+                  <td className="px-4 py-3 cursor-pointer" onClick={() => openDetail(t.id)}>
                     <div className="font-medium">{t.name}</div>
                     <div className="text-xs text-[hsl(var(--muted-foreground))]">{t.slug}</div>
                   </td>
@@ -113,6 +136,14 @@ export default function AdminTeamsPage() {
           </table>
         </div>
       )}
+
+      <AdminTeamDialog
+        mode={dialogMode}
+        teamId={dialogTeamId}
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSaved={load}
+      />
     </div>
   );
 }

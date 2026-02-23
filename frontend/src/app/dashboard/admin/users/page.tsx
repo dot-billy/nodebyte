@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, ShieldCheck, ShieldOff, UserX, MoreHorizontal } from "lucide-react";
+import { Search, ShieldCheck, ShieldOff, UserX, MoreHorizontal, UserPlus } from "lucide-react";
 
 import { api, type AdminUserRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { AdminUserDialog } from "@/components/admin-user-dialog";
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
@@ -18,6 +19,10 @@ export default function AdminUsersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"create" | "detail">("create");
+  const [dialogUserId, setDialogUserId] = useState<string | undefined>();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -34,6 +39,18 @@ export default function AdminUsersPage() {
   }, [debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
+
+  function openCreate() {
+    setDialogMode("create");
+    setDialogUserId(undefined);
+    setDialogOpen(true);
+  }
+
+  function openDetail(userId: string) {
+    setDialogMode("detail");
+    setDialogUserId(userId);
+    setDialogOpen(true);
+  }
 
   async function toggleActive(u: AdminUserRow) {
     setBusy(u.id);
@@ -68,11 +85,17 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Users</h1>
-        <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-          Manage all users across the platform.
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Users</h1>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+            Manage all users across the platform.
+          </p>
+        </div>
+        <Button onClick={openCreate}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Create User
+        </Button>
       </div>
 
       <div className="relative max-w-sm">
@@ -106,8 +129,8 @@ export default function AdminUsersPage() {
               {users.map((u) => {
                 const isSelf = u.id === currentUser?.id;
                 return (
-                  <tr key={u.id} className="border-b border-[hsl(var(--border))] last:border-0">
-                    <td className="px-4 py-3">
+                  <tr key={u.id} className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-[hsl(var(--muted))]/50 transition-colors">
+                    <td className="px-4 py-3 cursor-pointer" onClick={() => openDetail(u.id)}>
                       <div className="font-medium">{u.email}</div>
                       {u.full_name && (
                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{u.full_name}</div>
@@ -193,6 +216,14 @@ export default function AdminUsersPage() {
           </table>
         </div>
       )}
+
+      <AdminUserDialog
+        mode={dialogMode}
+        userId={dialogUserId}
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSaved={load}
+      />
     </div>
   );
 }
