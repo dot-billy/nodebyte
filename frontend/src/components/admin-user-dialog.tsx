@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { X, Trash2, Plus } from "lucide-react";
+import { X, Trash2, Plus, Shield, ShieldOff, UserCheck, UserX } from "lucide-react";
 
 import { api, ApiError, type AdminUserRow, type AdminTeamBrief } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,28 @@ interface Props {
 
 const ROLES = ["owner", "admin", "member", "viewer"] as const;
 
+function Toggle({ checked, onChange, label, activeColor = "bg-emerald-500", icon }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  activeColor?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] px-4 py-3 text-left transition-colors hover:bg-[hsl(var(--muted))] w-full"
+    >
+      {icon}
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      <div className={`relative h-6 w-11 rounded-full transition-colors ${checked ? activeColor : "bg-[hsl(var(--muted))]"}`}>
+        <div className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+      </div>
+    </button>
+  );
+}
+
 export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props) {
   const [user, setUser] = useState<AdminUserRow | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,7 +54,7 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [isActive, setIsActive] = useState(true);
 
-  const [addTeamEmail, setAddTeamEmail] = useState("");
+  const [addTeamName, setAddTeamName] = useState("");
   const [addTeamRole, setAddTeamRole] = useState("member");
   const [addingTeam, setAddingTeam] = useState(false);
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -57,6 +79,7 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
   useEffect(() => {
     if (!open) return;
     setError("");
+    setShowAddTeam(false);
     if (mode === "detail" && userId) {
       loadUser();
     } else {
@@ -122,8 +145,9 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
   async function handleAddToTeam() {
     if (!userId) return;
     setAddingTeam(true);
+    setError("");
     try {
-      const teams = await api.admin.listTeams({ q: addTeamEmail, limit: 10 });
+      const teams = await api.admin.listTeams({ q: addTeamName, limit: 10 });
       if (teams.length === 0) {
         setError("No team found matching that name");
         setAddingTeam(false);
@@ -131,7 +155,7 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
       }
       await api.admin.addMember(teams[0].id, { email: user?.email ?? "", role: addTeamRole });
       setShowAddTeam(false);
-      setAddTeamEmail("");
+      setAddTeamName("");
       setAddTeamRole("member");
       await loadUser();
       onSaved();
@@ -144,105 +168,144 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-xl animate-slide-in-left">
+      <div className="relative z-50 flex w-full max-w-lg flex-col max-h-[90vh] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl animate-slide-in-left">
+
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-6 py-4">
-          <h2 className="text-lg font-semibold">
-            {mode === "create" ? "Create User" : "User Details"}
-          </h2>
-          <button onClick={onClose} className="rounded-md p-1 hover:bg-[hsl(var(--muted))] transition-colors">
-            <X className="h-5 w-5" />
+          <div>
+            <h2 className="text-lg font-semibold">
+              {mode === "create" ? "Create User" : "Edit User"}
+            </h2>
+            {mode === "detail" && user && (
+              <p className="mt-0.5 text-sm text-[hsl(var(--muted-foreground))]">{user.email}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="rounded-md p-2 hover:bg-[hsl(var(--muted))] transition-colors">
+            <X className="h-5 w-5 text-[hsl(var(--muted-foreground))]" />
           </button>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-16"><Spinner className="h-6 w-6" /></div>
-        ) : (
-          <div className="space-y-5 p-6">
-            {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
-                {error}
-              </div>
-            )}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex justify-center py-16"><Spinner className="h-6 w-6" /></div>
+          ) : (
+            <div className="divide-y divide-[hsl(var(--border))]">
 
-            <div className="space-y-2">
-              <Label htmlFor="admin-user-email">Email</Label>
-              <Input id="admin-user-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="admin-user-name">Full name</Label>
-              <Input id="admin-user-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jane Doe" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="admin-user-pw">{mode === "create" ? "Password" : "New password (leave blank to keep)"}</Label>
-              <Input id="admin-user-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "create" ? "Min. 8 characters" : "••••••••"} minLength={8} />
-            </div>
-
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={isSuperuser} onChange={(e) => setIsSuperuser(e.target.checked)} className="rounded" />
-                Superuser
-              </label>
-              {mode === "detail" && (
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="rounded" />
-                  Active
-                </label>
-              )}
-            </div>
-
-            {mode === "detail" && user && (
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Team Memberships</h3>
-                  <Button variant="ghost" size="sm" onClick={() => setShowAddTeam(!showAddTeam)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Add to team
-                  </Button>
+              {error && (
+                <div className="px-6 pt-4">
+                  <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-400">
+                    {error}
+                  </div>
                 </div>
+              )}
 
-                {showAddTeam && (
-                  <div className="flex gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] p-3">
-                    <Input placeholder="Team name..." value={addTeamEmail} onChange={(e) => setAddTeamEmail(e.target.value)} className="flex-1" />
-                    <select value={addTeamRole} onChange={(e) => setAddTeamRole(e.target.value)} className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 text-sm">
-                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                    <Button size="sm" onClick={handleAddToTeam} disabled={addingTeam || !addTeamEmail}>
-                      {addingTeam ? <Spinner className="h-4 w-4" /> : "Add"}
+              {/* Profile Section */}
+              <div className="space-y-4 px-6 py-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Profile</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="admin-user-email" className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Email</Label>
+                    <Input id="admin-user-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="admin-user-name" className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Full name</Label>
+                    <Input id="admin-user-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jane Doe" />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="admin-user-pw" className="text-xs font-medium text-[hsl(var(--muted-foreground))]">
+                      {mode === "create" ? "Password" : "Reset password"}
+                    </Label>
+                    <Input id="admin-user-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === "create" ? "Min. 8 characters" : "Leave blank to keep current"} minLength={8} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Account Flags Section */}
+              <div className="space-y-3 px-6 py-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Account</h3>
+                <div className="space-y-2">
+                  <Toggle
+                    checked={isSuperuser}
+                    onChange={setIsSuperuser}
+                    label="Superuser"
+                    activeColor="bg-amber-500"
+                    icon={isSuperuser ? <Shield className="h-4 w-4 text-amber-500" /> : <ShieldOff className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />}
+                  />
+                  {mode === "detail" && (
+                    <Toggle
+                      checked={isActive}
+                      onChange={setIsActive}
+                      label="Active"
+                      activeColor="bg-emerald-500"
+                      icon={isActive ? <UserCheck className="h-4 w-4 text-emerald-500" /> : <UserX className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Team Memberships Section (detail mode only) */}
+              {mode === "detail" && user && (
+                <div className="space-y-3 px-6 py-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                      Teams ({user.teams.length})
+                    </h3>
+                    <Button variant="outline" size="sm" onClick={() => setShowAddTeam(!showAddTeam)} className="h-7 text-xs">
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add to team
                     </Button>
                   </div>
-                )}
 
-                {user.teams.length === 0 ? (
-                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Not a member of any team.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {user.teams.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] px-3 py-2">
-                        <div>
-                          <span className="text-sm font-medium">{t.name}</span>
-                          <Badge variant="outline" className="ml-2 text-xs">{t.role}</Badge>
-                        </div>
-                        <button onClick={() => handleRemoveTeam(t)} className="rounded p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                  {showAddTeam && (
+                    <div className="rounded-lg border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 p-3">
+                      <div className="flex gap-2">
+                        <Input placeholder="Team name..." value={addTeamName} onChange={(e) => setAddTeamName(e.target.value)} className="flex-1 h-8 text-sm" />
+                        <select value={addTeamRole} onChange={(e) => setAddTeamRole(e.target.value)} className="h-8 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 text-xs">
+                          {ROLES.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                        </select>
+                        <Button size="sm" className="h-8" onClick={handleAddToTeam} disabled={addingTeam || !addTeamName}>
+                          {addingTeam ? <Spinner className="h-3.5 w-3.5" /> : "Add"}
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    </div>
+                  )}
 
-            <div className="flex justify-end gap-2 border-t border-[hsl(var(--border))] pt-4">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={mode === "create" ? handleCreate : handleUpdate} disabled={busy || (mode === "create" && (!email || password.length < 8))}>
-                {busy && <Spinner className="mr-2 h-4 w-4" />}
-                {mode === "create" ? "Create User" : "Save Changes"}
-              </Button>
+                  {user.teams.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-[hsl(var(--border))] py-6 text-center text-sm text-[hsl(var(--muted-foreground))]">
+                      Not a member of any team.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {user.teams.map((t) => (
+                        <div key={t.id} className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{t.name}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t.role}</Badge>
+                          </div>
+                          <button onClick={() => handleRemoveTeam(t)} className="rounded-md p-1.5 text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && (
+          <div className="flex justify-end gap-2 border-t border-[hsl(var(--border))] px-6 py-4">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={mode === "create" ? handleCreate : handleUpdate} disabled={busy || (mode === "create" && (!email || password.length < 8))}>
+              {busy && <Spinner className="mr-2 h-4 w-4" />}
+              {mode === "create" ? "Create User" : "Save Changes"}
+            </Button>
           </div>
         )}
       </div>
