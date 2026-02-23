@@ -10,6 +10,7 @@ class UserPublic(BaseModel):
     id: uuid.UUID
     email: EmailStr
     full_name: str | None
+    is_superuser: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

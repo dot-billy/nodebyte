@@ -15,6 +15,9 @@ import {
   Download,
   Menu,
   X,
+  Shield,
+  UsersRound,
+  Building2,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
@@ -29,6 +32,12 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: typeof LayoutDash
   { href: "/dashboard/tokens", label: "Tokens", icon: KeyRound },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/download", label: "Get Extension", icon: Download, muted: true },
+];
+
+const ADMIN_NAV_ITEMS: readonly { href: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
+  { href: "/dashboard/admin", label: "Overview", icon: Shield, exact: true },
+  { href: "/dashboard/admin/users", label: "Users", icon: UsersRound },
+  { href: "/dashboard/admin/teams", label: "Teams", icon: Building2 },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -110,6 +119,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {label}
         </Link>
       ))}
+      {user.is_superuser && (
+        <>
+          <div className="my-3 border-t border-[hsl(var(--border))]" />
+          <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            Admin
+          </div>
+          {ADMIN_NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => (
+            <Link key={href} href={href} className={navLinkClass(href, exact)}>
+              <Icon className="h-4 w-4" />
+              {label}
+            </Link>
+          ))}
+        </>
+      )}
     </nav>
   );
 

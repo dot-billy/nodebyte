@@ -18,6 +18,7 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Bookmark sync** — nodes with URLs automatically sync to browser bookmarks, organized by kind
 - **Bulk operations** — multi-select nodes to delete or tag in batch
 - **Invite system** — invite team members by email with role-based access
+- **Super admin console** — platform-wide user and team management for superusers
 
 ## Screenshots
 
@@ -95,6 +96,35 @@ docker compose exec \
 
 After that, invite additional users from the Team page in the dashboard.
 
+### Super admin console
+
+Users with `is_superuser = true` get an **Admin** section in the dashboard sidebar with platform-wide management:
+
+- **Overview** — total users, teams, and nodes at a glance
+- **Users** — search, activate/deactivate, promote/demote superuser status, or delete any user
+- **Teams** — search, view member/node counts, or delete any team
+
+The `create_admin.py` script automatically grants superuser status. To promote an existing user, run:
+
+```bash
+docker compose exec backend python -c "
+import asyncio
+from sqlalchemy import update
+from app.db.session import SessionLocal
+from app.models.user import User
+
+async def main():
+    async with SessionLocal() as db:
+        await db.execute(update(User).where(User.email == 'you@example.com').values(is_superuser=True))
+        await db.commit()
+        print('Done')
+
+asyncio.run(main())
+"
+```
+
+Or toggle superuser status from the admin console itself once you have at least one superuser.
+
 ## Configuration
 
 All configuration is done through environment variables. Set them in your `.env` file or pass them directly to Docker Compose.
@@ -120,8 +150,10 @@ All configuration is done through environment variables. Set them in your `.env`
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `NODE_ENV` | Set to `production` for optimized builds (`next build` + `next start`) | `development` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend API URL (used client-side) | `http://localhost:8000` |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Turnstile site key (use test key for dev) | *(test key)* |
+| `NEXT_PUBLIC_EDITION` | Landing page variant: `cloud` (marketing) or `oss` (minimal) | `cloud` |
 
 ### Docker Compose
 

@@ -52,7 +52,8 @@ async def main() -> None:
             sys.exit(1)
 
         user = await create_user(db, email=email, password=password, full_name=None)
-        print(f"Created user: {email} (id: {user.id})")
+        user.is_superuser = True
+        print(f"Created superuser: {email} (id: {user.id})")
 
         slug = slugify(team_name)
         res = await db.execute(select(Team.id).where(Team.slug == slug))

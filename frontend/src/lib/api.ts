@@ -52,6 +52,7 @@ export interface UserPublic {
   id: string;
   email: string;
   full_name: string | null;
+  is_superuser: boolean;
   created_at: string;
 }
 
@@ -128,6 +129,39 @@ export interface NodePublic {
 
 export interface PublicSettings {
   registration_enabled: boolean;
+}
+
+export interface AdminStats {
+  total_users: number;
+  total_teams: number;
+  total_nodes: number;
+}
+
+export interface AdminTeamBrief {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_superuser: boolean;
+  created_at: string;
+  teams: AdminTeamBrief[];
+}
+
+export interface AdminTeamRow {
+  id: string;
+  name: string;
+  slug: string;
+  owner_email: string | null;
+  member_count: number;
+  node_count: number;
+  created_at: string;
 }
 
 export const api = {
@@ -247,6 +281,39 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ node_ids: nodeIds, add: add ?? [], remove: remove ?? [] }),
       });
+    },
+  },
+  admin: {
+    stats() {
+      return request<AdminStats>("/api/admin/stats");
+    },
+    listUsers(params?: { q?: string; limit?: number; offset?: number }) {
+      const qs = new URLSearchParams();
+      if (params?.q) qs.set("q", params.q);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.offset) qs.set("offset", String(params.offset));
+      const q = qs.toString();
+      return request<AdminUserRow[]>(`/api/admin/users${q ? `?${q}` : ""}`);
+    },
+    updateUser(userId: string, data: { is_active?: boolean; is_superuser?: boolean }) {
+      return request<AdminUserRow>(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+    deleteUser(userId: string) {
+      return request<void>(`/api/admin/users/${userId}`, { method: "DELETE" });
+    },
+    listTeams(params?: { q?: string; limit?: number; offset?: number }) {
+      const qs = new URLSearchParams();
+      if (params?.q) qs.set("q", params.q);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.offset) qs.set("offset", String(params.offset));
+      const q = qs.toString();
+      return request<AdminTeamRow[]>(`/api/admin/teams${q ? `?${q}` : ""}`);
+    },
+    deleteTeam(teamId: string) {
+      return request<void>(`/api/admin/teams/${teamId}`, { method: "DELETE" });
     },
   },
 };
