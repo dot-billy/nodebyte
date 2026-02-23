@@ -30,16 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [u, t] = await Promise.all([api.auth.me(), api.teams.list()]);
       setUser(u);
       setTeams(t);
-      if (t.length > 0 && !activeTeam) {
-        const stored = typeof window !== "undefined" ? localStorage.getItem("activeTeamId") : null;
-        const match = stored ? t.find((tm) => tm.id === stored) : null;
-        setActiveTeamState(match ?? t[0]);
+      if (t.length > 0) {
+        setActiveTeamState((prev) => {
+          if (prev) return prev;
+          const stored = typeof window !== "undefined" ? localStorage.getItem("activeTeamId") : null;
+          const match = stored ? t.find((tm) => tm.id === stored) : null;
+          return match ?? t[0];
+        });
       }
     } catch {
       setUser(null);
       setTeams(null);
     }
-  }, [activeTeam]);
+  }, []);
 
   const bootstrap = useCallback(async () => {
     setLoading(true);
