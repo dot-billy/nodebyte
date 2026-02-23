@@ -75,6 +75,26 @@ Once the containers are healthy:
 
 Register your first account at http://localhost:3000/register. The first team is created automatically during registration.
 
+### Invite-only mode
+
+If you set `REGISTRATION_ENABLED=false`, create the first admin user from the command line:
+
+```bash
+docker compose exec backend python scripts/create_admin.py
+```
+
+The script prompts for email, password, and team name. You can also pass them as environment variables:
+
+```bash
+docker compose exec \
+  -e ADMIN_EMAIL="admin@example.com" \
+  -e ADMIN_PASSWORD="your-secure-password" \
+  -e ADMIN_TEAM="My Org" \
+  backend python scripts/create_admin.py
+```
+
+After that, invite additional users from the Team page in the dashboard.
+
 ## Configuration
 
 All configuration is done through environment variables. Set them in your `.env` file or pass them directly to Docker Compose.
@@ -179,6 +199,7 @@ nodebyte/
 │   │   ├── schemas/      # Pydantic schemas
 │   │   └── services/     # Business logic
 │   ├── alembic/          # Database migrations
+│   ├── scripts/          # create_admin.py, etc.
 │   ├── Dockerfile
 │   └── entrypoint.sh
 ├── frontend/             # Next.js application
