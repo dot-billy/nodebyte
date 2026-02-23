@@ -19,6 +19,20 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Bulk operations** — multi-select nodes to delete or tag in batch
 - **Invite system** — invite team members by email with role-based access
 
+## Screenshots
+
+| Dashboard | Nodes |
+|-----------|-------|
+| ![Dashboard](screenshots/dashboard.png) | ![Nodes](screenshots/nodes.png) |
+
+| Team Management | Registration Tokens |
+|-----------------|---------------------|
+| ![Team](screenshots/team.png) | ![Tokens](screenshots/tokens.png) |
+
+| Browser Extension |
+|-------------------|
+| ![Extension](screenshots/extension.png) |
+
 ## Architecture
 
 ```mermaid
