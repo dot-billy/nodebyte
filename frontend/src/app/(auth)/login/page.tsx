@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -14,6 +14,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Turnstile } from "@/components/turnstile";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<Card><CardContent className="flex justify-center py-16"><Spinner className="h-6 w-6" /></CardContent></Card>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();

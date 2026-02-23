@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldX } from "lucide-react";
@@ -18,6 +18,14 @@ import { Turnstile } from "@/components/turnstile";
 const ROLE_LABELS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member", viewer: "Viewer" };
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<Card><CardContent className="flex justify-center py-16"><Spinner className="h-6 w-6" /></CardContent></Card>}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const { register } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
