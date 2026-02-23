@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -121,12 +121,12 @@ async def admin_update_user(
     )
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def admin_delete_user(
     user_id: uuid.UUID,
     su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     if user_id == su.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete yourself")
 
@@ -137,6 +137,7 @@ async def admin_delete_user(
 
     await db.delete(target)
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/teams", response_model=list[AdminTeamRow])
@@ -187,12 +188,12 @@ async def admin_list_teams(
     return rows
 
 
-@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def admin_delete_team(
     team_id: uuid.UUID,
     _su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     result = await db.execute(select(Team).where(Team.id == team_id))
     target = result.scalar_one_or_none()
     if not target:
@@ -200,3 +201,4 @@ async def admin_delete_team(
 
     await db.delete(target)
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
