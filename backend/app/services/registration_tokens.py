@@ -154,6 +154,9 @@ async def register_or_update_node_with_token(
         existing.notes = data.get("notes", existing.notes)
         existing.tags = _merge_unique_strs(existing.tags, data.get("tags"))
         existing.meta = {**(existing.meta or {}), **(data.get("meta") or {})}
+        # Avoid async lazy-load during response serialization (MissingGreenlet)
+        # by ensuring updated_at is populated in-memory.
+        existing.updated_at = now
         existing.last_seen_at = now
         existing.last_seen_source = "register-node"
         await db.flush()

@@ -43,4 +43,6 @@ async def register_node(
         response.status_code = 200
 
     await db.commit()
+    # Ensure any DB-generated fields are loaded before Pydantic serialization.
+    await db.refresh(node)
     return node

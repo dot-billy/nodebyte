@@ -53,13 +53,24 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
   ARCH="$(_jq '.architecture')"
   PROFILES="$(_jq '[.profiles[]?] | join(",")')"
 
-  IP="$(_jq '
-    [.state.network? // {} | to_entries[]
-     | .value.addresses[]?
-     | select(.family == "inet" and .scope == "global")]
-    | first | .address // empty
+  IPS_JSON="$(echo "$row" | base64 -d | jq -c '
+    [.state.network? // {} | to_entries[] as $iface
+      | ($iface.value.addresses // [])[]
+      | select(.address != null)
+      | {
+          interface: $iface.key,
+          family: .family,
+          scope: .scope,
+          address: .address
+        }
+    ]'
+  )"
+
+  IP="$(echo "$IPS_JSON" | jq -r '
+    (map(select(.family == "inet" and .scope == "global") | .address) | first)
+    // (map(select(.family == "inet") | .address) | first)
+    // ""
   ')"
-  [[ "$IP" == "null" || -z "$IP" ]] && IP=""
 
   TAGS='["lxd"]'
   if [[ "$TYPE" == "container" ]]; then
@@ -82,12 +93,14 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
     --arg arch "$ARCH" \
     --arg profiles "$PROFILES" \
     --arg lxd_host "$LXD_HOST" \
+    --argjson ips "$IPS_JSON" \
     '{
       instance_type: $type,
       status: $status,
       arch: $arch,
       profiles: $profiles,
-      lxd_host: $lxd_host
+      lxd_host: $lxd_host,
+      ips: $ips
     }'
   )"
 
