@@ -538,7 +538,7 @@ function NewTokenBanner({ token, onDismiss }: { token: string; onDismiss: () => 
           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
             This is the only time the full token will be shown.
           </p>
-          <div className="mt-2 break-all rounded-md bg-white/60 p-2 font-mono text-xs dark:bg-black/30">
+          <div className="mt-2 break-all rounded-md bg-white p-2 font-mono text-xs text-amber-900 dark:bg-black/60 dark:text-amber-100">
             {token}
           </div>
         </div>

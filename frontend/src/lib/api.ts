@@ -164,6 +164,19 @@ export interface AdminTeamRow {
   created_at: string;
 }
 
+export interface AdminMemberRow {
+  id: string;
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  joined_at: string;
+}
+
+export interface AdminTeamDetail extends AdminTeamRow {
+  members: AdminMemberRow[];
+}
+
 export const api = {
   auth: {
     publicSettings() {
@@ -295,7 +308,13 @@ export const api = {
       const q = qs.toString();
       return request<AdminUserRow[]>(`/api/admin/users${q ? `?${q}` : ""}`);
     },
-    updateUser(userId: string, data: { is_active?: boolean; is_superuser?: boolean }) {
+    createUser(data: { email: string; password: string; full_name?: string; is_superuser?: boolean }) {
+      return request<AdminUserRow>("/api/admin/users", { method: "POST", body: JSON.stringify(data) });
+    },
+    getUser(userId: string) {
+      return request<AdminUserRow>(`/api/admin/users/${userId}`);
+    },
+    updateUser(userId: string, data: { is_active?: boolean; is_superuser?: boolean; email?: string; full_name?: string; new_password?: string }) {
       return request<AdminUserRow>(`/api/admin/users/${userId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -312,8 +331,35 @@ export const api = {
       const q = qs.toString();
       return request<AdminTeamRow[]>(`/api/admin/teams${q ? `?${q}` : ""}`);
     },
+    createTeam(data: { name: string; owner_user_id: string }) {
+      return request<AdminTeamRow>("/api/admin/teams", { method: "POST", body: JSON.stringify(data) });
+    },
+    getTeam(teamId: string) {
+      return request<AdminTeamDetail>(`/api/admin/teams/${teamId}`);
+    },
+    updateTeam(teamId: string, data: { name?: string; slug?: string }) {
+      return request<AdminTeamRow>(`/api/admin/teams/${teamId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
     deleteTeam(teamId: string) {
       return request<void>(`/api/admin/teams/${teamId}`, { method: "DELETE" });
+    },
+    addMember(teamId: string, data: { email: string; role: string }) {
+      return request<AdminMemberRow>(`/api/admin/teams/${teamId}/members`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    updateMember(teamId: string, membershipId: string, role: string) {
+      return request<AdminMemberRow>(`/api/admin/teams/${teamId}/members/${membershipId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
+    },
+    removeMember(teamId: string, membershipId: string) {
+      return request<void>(`/api/admin/teams/${teamId}/members/${membershipId}`, { method: "DELETE" });
     },
   },
 };

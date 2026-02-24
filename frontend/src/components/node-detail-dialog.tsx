@@ -57,6 +57,95 @@ function formatDate(iso: string) {
   });
 }
 
+type IpMetaEntry = {
+  interface?: string;
+  family?: string;
+  scope?: string;
+  address?: string;
+};
+
+function isIpMetaEntry(v: unknown): v is IpMetaEntry {
+  if (!v || typeof v !== "object") return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.address === "string" &&
+    (obj.interface === undefined || typeof obj.interface === "string") &&
+    (obj.family === undefined || typeof obj.family === "string") &&
+    (obj.scope === undefined || typeof obj.scope === "string")
+  );
+}
+
+function renderIpMeta(entries: IpMetaEntry[]) {
+  const filtered = entries
+    .filter((e) => !!e.address)
+    .map((e) => ({
+      interface: e.interface ?? "unknown",
+      family: e.family ?? "",
+      scope: e.scope ?? "",
+      address: e.address ?? "",
+    }));
+
+  const scopeRank: Record<string, number> = { global: 0, link: 1, local: 2 };
+  const familyRank: Record<string, number> = { inet: 0, inet6: 1 };
+
+  const grouped = new Map<string, typeof filtered>();
+  for (const e of filtered) {
+    const list = grouped.get(e.interface) ?? [];
+    list.push(e);
+    grouped.set(e.interface, list);
+  }
+
+  const interfaces = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b));
+  for (const iface of interfaces) {
+    grouped.get(iface)!.sort((a, b) => {
+      const sr = (scopeRank[a.scope] ?? 99) - (scopeRank[b.scope] ?? 99);
+      if (sr !== 0) return sr;
+      const fr = (familyRank[a.family] ?? 99) - (familyRank[b.family] ?? 99);
+      if (fr !== 0) return fr;
+      return a.address.localeCompare(b.address);
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      {interfaces.map((iface) => (
+        <div key={iface}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            {iface}
+          </div>
+          <ul className="mt-1 space-y-0.5">
+            {grouped.get(iface)!.map((e, idx) => (
+              <li key={`${iface}-${idx}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="break-all">{e.address}</span>
+                {(e.family || e.scope) && (
+                  <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                    ({[e.family, e.scope].filter(Boolean).join(" ")})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderMetaValue(key: string, val: unknown) {
+  if (key === "ips" && Array.isArray(val) && val.every(isIpMetaEntry)) {
+    return renderIpMeta(val);
+  }
+
+  if (typeof val === "string") return <span className="break-all">{val}</span>;
+  if (typeof val === "number" || typeof val === "boolean") return <span>{String(val)}</span>;
+
+  return (
+    <pre className="whitespace-pre-wrap break-words text-xs">
+      {JSON.stringify(val, null, 2)}
+    </pre>
+  );
+}
+
 const kindColors: Record<string, string> = {
   device: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
   site: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
@@ -160,7 +249,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                     {metaEntries.map(([key, val]) => (
                       <tr key={key} className="border-b border-[hsl(var(--border))] last:border-0">
                         <td className="px-3 py-2 font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))] w-1/3">{key}</td>
-                        <td className="px-3 py-2 font-mono text-xs break-all">{typeof val === "string" ? val : JSON.stringify(val)}</td>
+                        <td className="px-3 py-2 font-mono text-xs align-top">{renderMetaValue(key, val)}</td>
                       </tr>
                     ))}
                   </tbody>
