@@ -128,6 +128,25 @@ export interface NodePublic {
   updated_at: string;
 }
 
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface NodeLastSeenStats {
+  last_24h: number;
+  last_7d: number;
+  last_30d: number;
+  never: number;
+}
+
+export interface NodeStats {
+  total: number;
+  by_kind: Record<string, number>;
+  last_seen: NodeLastSeenStats;
+  top_tags: TagCount[];
+}
+
 export interface PublicSettings {
   registration_enabled: boolean;
 }
@@ -263,6 +282,9 @@ export const api = {
   nodes: {
     count(teamId: string) {
       return request<{ count: number }>(`/api/teams/${teamId}/nodes/count`);
+    },
+    stats(teamId: string) {
+      return request<NodeStats>(`/api/teams/${teamId}/nodes/stats`);
     },
     list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number }) {
       const qs = new URLSearchParams();

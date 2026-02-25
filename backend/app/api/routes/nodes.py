@@ -10,13 +10,14 @@ from app.core.rbac import require_role
 from app.db.session import get_db
 from app.models.node import Node
 from app.models.user import User
-from app.schemas.nodes import BulkActionResponse, BulkDeleteRequest, BulkTagRequest, NodeCreate, NodePublic, NodeUpdate
+from app.schemas.nodes import BulkActionResponse, BulkDeleteRequest, BulkTagRequest, NodeCreate, NodePublic, NodeStats, NodeUpdate
 from app.services.nodes import (
     bulk_delete_nodes,
     bulk_update_tags,
     count_nodes,
     create_node,
     delete_node,
+    get_node_stats,
     get_node,
     list_nodes,
     update_node,
@@ -34,6 +35,16 @@ async def nodes_count(
     await require_role(db, user=user, team_id=team_id, min_role="viewer")
     total = await count_nodes(db, team_id=team_id)
     return {"count": total}
+
+
+@router.get("/stats", response_model=NodeStats)
+async def nodes_stats(
+    team_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NodeStats:
+    await require_role(db, user=user, team_id=team_id, min_role="viewer")
+    return await get_node_stats(db, team_id=team_id)
 
 
 @router.get("", response_model=list[NodePublic])

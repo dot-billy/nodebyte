@@ -71,3 +71,22 @@ class BulkTagRequest(BaseModel):
 class BulkActionResponse(BaseModel):
     affected: int
 
+
+class TagCount(BaseModel):
+    tag: str
+    count: int
+
+
+class NodeLastSeenStats(BaseModel):
+    last_24h: int
+    last_7d: int
+    last_30d: int
+    never: int
+
+
+class NodeStats(BaseModel):
+    total: int
+    by_kind: dict[str, int]
+    last_seen: NodeLastSeenStats
+    top_tags: list[TagCount]
+
