@@ -40,6 +40,29 @@ export default function AdminUsersPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!actionMenu) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node | null;
+      if (!target) return;
+      const root = document.querySelector(`[data-action-menu-root="${actionMenu}"]`);
+      if (root && root.contains(target)) return;
+      setActionMenu(null);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setActionMenu(null);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [actionMenu]);
+
   function openCreate() {
     setDialogMode("create");
     setDialogUserId(undefined);
@@ -165,7 +188,7 @@ export default function AdminUsersPage() {
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="relative inline-block">
+                      <div className="relative inline-block" data-action-menu-root={u.id}>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -177,7 +200,6 @@ export default function AdminUsersPage() {
                         </Button>
                         {actionMenu === u.id && (
                           <>
-                            <div className="fixed inset-0 z-40" onClick={() => setActionMenu(null)} />
                             <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] py-1 shadow-lg">
                               <button
                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-40"
