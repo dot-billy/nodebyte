@@ -64,12 +64,30 @@ type IpMetaEntry = {
   address?: string;
 };
 
+type DockerIpMetaEntry = {
+  network?: string;
+  family?: string;
+  scope?: string;
+  address?: string;
+};
+
 function isIpMetaEntry(v: unknown): v is IpMetaEntry {
   if (!v || typeof v !== "object") return false;
   const obj = v as Record<string, unknown>;
   return (
     typeof obj.address === "string" &&
     (obj.interface === undefined || typeof obj.interface === "string") &&
+    (obj.family === undefined || typeof obj.family === "string") &&
+    (obj.scope === undefined || typeof obj.scope === "string")
+  );
+}
+
+function isDockerIpMetaEntry(v: unknown): v is DockerIpMetaEntry {
+  if (!v || typeof v !== "object") return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.address === "string" &&
+    (obj.network === undefined || typeof obj.network === "string") &&
     (obj.family === undefined || typeof obj.family === "string") &&
     (obj.scope === undefined || typeof obj.scope === "string")
   );
@@ -131,13 +149,173 @@ function renderIpMeta(entries: IpMetaEntry[]) {
   );
 }
 
+function renderDockerIpMeta(entries: DockerIpMetaEntry[]) {
+  const filtered = entries
+    .filter((e) => !!e.address)
+    .map((e) => ({
+      network: e.network ?? "unknown",
+      family: e.family ?? "",
+      scope: e.scope ?? "",
+      address: e.address ?? "",
+    }));
+
+  const familyRank: Record<string, number> = { inet: 0, inet6: 1 };
+  const scopeRank: Record<string, number> = { container: 0, global: 1, link: 2, local: 3 };
+
+  const grouped = new Map<string, typeof filtered>();
+  for (const e of filtered) {
+    const list = grouped.get(e.network) ?? [];
+    list.push(e);
+    grouped.set(e.network, list);
+  }
+
+  const networks = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b));
+  for (const net of networks) {
+    grouped.get(net)!.sort((a, b) => {
+      const fr = (familyRank[a.family] ?? 99) - (familyRank[b.family] ?? 99);
+      if (fr !== 0) return fr;
+      const sr = (scopeRank[a.scope] ?? 99) - (scopeRank[b.scope] ?? 99);
+      if (sr !== 0) return sr;
+      return a.address.localeCompare(b.address);
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      {networks.map((net) => (
+        <div key={net}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            {net}
+          </div>
+          <ul className="mt-1 space-y-0.5">
+            {grouped.get(net)!.map((e, idx) => (
+              <li key={`${net}-${idx}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="break-all">{e.address}</span>
+                {(e.family || e.scope) && (
+                  <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                    ({[e.family, e.scope].filter(Boolean).join(" ")})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function renderKeyValueRecord(obj: Record<string, unknown>) {
+  const entries = Object.entries(obj)
+    .filter(([, v]) => v !== null && v !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (entries.length === 0) return <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+      <table className="w-full text-xs">
+        <tbody>
+          {entries.map(([k, v]) => (
+            <tr key={k} className="border-b border-[hsl(var(--border))] last:border-0">
+              <td className="w-1/3 bg-[hsl(var(--muted))] px-2 py-1.5 font-medium text-[hsl(var(--muted-foreground))] align-top">
+                <span className="break-all">{k}</span>
+              </td>
+              <td className="px-2 py-1.5 align-top">
+                {typeof v === "string" ? (
+                  <span className="break-all">{v}</span>
+                ) : (typeof v === "number" || typeof v === "boolean") ? (
+                  <span>{String(v)}</span>
+                ) : (
+                  <pre className="whitespace-pre-wrap break-words">{JSON.stringify(v, null, 2)}</pre>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function renderDockerPorts(val: unknown) {
+  // Docker inspect: NetworkSettings.Ports is an object like:
+  // { "80/tcp": [ { HostIp, HostPort } ], "443/tcp": null }
+  if (!isPlainRecord(val)) return null;
+  const entries = Object.entries(val).sort(([a], [b]) => a.localeCompare(b));
+
+  return (
+    <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+      <table className="w-full text-xs">
+        <tbody>
+          {entries.map(([containerPort, bindings]) => {
+            let rendered: React.ReactNode = <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+            if (Array.isArray(bindings)) {
+              const rows = bindings
+                .filter((b) => !!b && typeof b === "object")
+                .map((b) => b as Record<string, unknown>)
+                .map((b) => ({
+                  hostIp: typeof b.HostIp === "string" ? b.HostIp : "",
+                  hostPort: typeof b.HostPort === "string" ? b.HostPort : "",
+                }))
+                .filter((x) => x.hostIp || x.hostPort);
+
+              if (rows.length > 0) {
+                rendered = (
+                  <div className="space-y-0.5">
+                    {rows.map((r, idx) => (
+                      <div key={idx} className="break-all">
+                        {r.hostIp ? `${r.hostIp}:` : ""}{r.hostPort || "?"}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+            } else if (bindings === null) {
+              rendered = <span className="text-[hsl(var(--muted-foreground))]">not published</span>;
+            }
+
+            return (
+              <tr key={containerPort} className="border-b border-[hsl(var(--border))] last:border-0">
+                <td className="w-1/3 bg-[hsl(var(--muted))] px-2 py-1.5 font-medium text-[hsl(var(--muted-foreground))] align-top">
+                  <span className="break-all">{containerPort}</span>
+                </td>
+                <td className="px-2 py-1.5 align-top">{rendered}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function renderMetaValue(key: string, val: unknown) {
-  if (key === "ips" && Array.isArray(val) && val.every(isIpMetaEntry)) {
-    return renderIpMeta(val);
+  if (key === "ips" && Array.isArray(val)) {
+    if (val.every(isIpMetaEntry)) return renderIpMeta(val);
+    if (val.every(isDockerIpMetaEntry)) return renderDockerIpMeta(val);
   }
 
   if (typeof val === "string") return <span className="break-all">{val}</span>;
   if (typeof val === "number" || typeof val === "boolean") return <span>{String(val)}</span>;
+
+  if (key === "labels" && isPlainRecord(val)) {
+    return renderKeyValueRecord(val);
+  }
+
+  if (key === "ports") {
+    const ports = renderDockerPorts(val);
+    if (ports) return ports;
+  }
+
+  if (isPlainRecord(val)) {
+    return renderKeyValueRecord(val);
+  }
 
   return (
     <pre className="whitespace-pre-wrap break-words text-xs">
