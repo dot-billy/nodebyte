@@ -101,7 +101,7 @@ export default function DashboardPage() {
       </div>
 
       {stats && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Top tags</CardTitle>
@@ -119,6 +119,43 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">IP footprint</CardTitle>
+              <Server className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className="text-xs">
+                  IPv4 nodes: {stats.ip_family_nodes.inet ?? 0}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  IPv6 nodes: {stats.ip_family_nodes.inet6 ?? 0}
+                </Badge>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                {stats.ip_segments.length === 0 ? (
+                  <div className="text-sm text-[hsl(var(--muted-foreground))]">No IP metadata yet.</div>
+                ) : (
+                  <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {stats.ip_segments.map((s) => (
+                          <tr key={s.segment} className="border-b border-[hsl(var(--border))] last:border-0">
+                            <td className="px-3 py-2 font-medium">{s.segment}</td>
+                            <td className="px-3 py-2 text-right text-[hsl(var(--muted-foreground))]">
+                              {s.node_count} node{s.node_count !== 1 ? "s" : ""} · {s.address_count} addr
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
           <Card>

@@ -89,4 +89,12 @@ class NodeStats(BaseModel):
     by_kind: dict[str, int]
     last_seen: NodeLastSeenStats
     top_tags: list[TagCount]
+    ip_segments: list["IpSegmentCount"] = Field(default_factory=list)
+    ip_family_nodes: dict[str, int] = Field(default_factory=dict)
+
+
+class IpSegmentCount(BaseModel):
+    segment: str
+    node_count: int
+    address_count: int
 

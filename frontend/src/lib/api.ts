@@ -145,6 +145,8 @@ export interface NodeStats {
   by_kind: Record<string, number>;
   last_seen: NodeLastSeenStats;
   top_tags: TagCount[];
+  ip_segments: { segment: string; node_count: number; address_count: number }[];
+  ip_family_nodes: Record<string, number>;
 }
 
 export interface PublicSettings {

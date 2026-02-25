@@ -7,7 +7,7 @@ from sqlalchemy import delete as sa_delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node import Node
-from app.schemas.nodes import NodeLastSeenStats, NodeStats, TagCount
+from app.schemas.nodes import IpSegmentCount, NodeLastSeenStats, NodeStats, TagCount
 
 
 async def list_nodes(
@@ -88,7 +88,66 @@ async def get_node_stats(db: AsyncSession, *, team_id: uuid.UUID, top_tags_limit
     )
     top_tags = [TagCount(tag=row[0], count=int(row[1])) for row in tag_rows.all()]
 
-    return NodeStats(total=int(total), by_kind=by_kind, last_seen=last_seen, top_tags=top_tags)
+    ip_rows = await db.execute(
+        text(
+            """
+            with ips as (
+              select
+                nodes.id as node_id,
+                coalesce(ip.value->>'network', ip.value->>'interface', 'unknown') as segment,
+                ip.value->>'family' as family
+              from nodes
+              join lateral jsonb_array_elements(coalesce(nodes.meta->'ips', '[]'::jsonb)) as ip(value) on true
+              where nodes.team_id = :team_id
+            )
+            select
+              segment,
+              count(distinct node_id)::int as node_count,
+              count(*)::int as address_count
+            from ips
+            where segment is not null and segment <> ''
+            group by segment
+            order by node_count desc, address_count desc, segment asc
+            limit 10
+            """
+        ),
+        {"team_id": str(team_id)},
+    )
+    ip_segments = [
+        IpSegmentCount(segment=row[0], node_count=int(row[1]), address_count=int(row[2]))
+        for row in ip_rows.all()
+    ]
+
+    fam_rows = await db.execute(
+        text(
+            """
+            with ips as (
+              select
+                nodes.id as node_id,
+                ip.value->>'family' as family
+              from nodes
+              join lateral jsonb_array_elements(coalesce(nodes.meta->'ips', '[]'::jsonb)) as ip(value) on true
+              where nodes.team_id = :team_id
+            )
+            select family, count(distinct node_id)::int as node_count
+            from ips
+            where family is not null and family <> ''
+            group by family
+            order by node_count desc, family asc
+            """
+        ),
+        {"team_id": str(team_id)},
+    )
+    ip_family_nodes = {str(row[0]): int(row[1]) for row in fam_rows.all()}
+
+    return NodeStats(
+        total=int(total),
+        by_kind=by_kind,
+        last_seen=last_seen,
+        top_tags=top_tags,
+        ip_segments=ip_segments,
+        ip_family_nodes=ip_family_nodes,
+    )
 
 
 async def get_node(db: AsyncSession, *, team_id: uuid.UUID, node_id: uuid.UUID) -> Node | None:
