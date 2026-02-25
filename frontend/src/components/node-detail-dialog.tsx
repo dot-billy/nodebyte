@@ -1,11 +1,12 @@
 "use client";
 
 import { ExternalLink, Copy, Check } from "lucide-react";
-import { useState } from "react";
-import type { NodePublic } from "@/lib/api";
+import { useEffect, useState, type ReactNode } from "react";
+import { api, type NodePublic } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 interface NodeDetailDialogProps {
   open: boolean;
@@ -14,7 +15,7 @@ interface NodeDetailDialogProps {
   onEdit: (node: NodePublic) => void;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   if (!children) return null;
   return (
     <div>
@@ -64,12 +65,30 @@ type IpMetaEntry = {
   address?: string;
 };
 
+type DockerIpMetaEntry = {
+  network?: string;
+  family?: string;
+  scope?: string;
+  address?: string;
+};
+
 function isIpMetaEntry(v: unknown): v is IpMetaEntry {
   if (!v || typeof v !== "object") return false;
   const obj = v as Record<string, unknown>;
   return (
     typeof obj.address === "string" &&
     (obj.interface === undefined || typeof obj.interface === "string") &&
+    (obj.family === undefined || typeof obj.family === "string") &&
+    (obj.scope === undefined || typeof obj.scope === "string")
+  );
+}
+
+function isDockerIpMetaEntry(v: unknown): v is DockerIpMetaEntry {
+  if (!v || typeof v !== "object") return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.address === "string" &&
+    (obj.network === undefined || typeof obj.network === "string") &&
     (obj.family === undefined || typeof obj.family === "string") &&
     (obj.scope === undefined || typeof obj.scope === "string")
   );
@@ -131,13 +150,173 @@ function renderIpMeta(entries: IpMetaEntry[]) {
   );
 }
 
+function renderDockerIpMeta(entries: DockerIpMetaEntry[]) {
+  const filtered = entries
+    .filter((e) => !!e.address)
+    .map((e) => ({
+      network: e.network ?? "unknown",
+      family: e.family ?? "",
+      scope: e.scope ?? "",
+      address: e.address ?? "",
+    }));
+
+  const familyRank: Record<string, number> = { inet: 0, inet6: 1 };
+  const scopeRank: Record<string, number> = { container: 0, global: 1, link: 2, local: 3 };
+
+  const grouped = new Map<string, typeof filtered>();
+  for (const e of filtered) {
+    const list = grouped.get(e.network) ?? [];
+    list.push(e);
+    grouped.set(e.network, list);
+  }
+
+  const networks = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b));
+  for (const net of networks) {
+    grouped.get(net)!.sort((a, b) => {
+      const fr = (familyRank[a.family] ?? 99) - (familyRank[b.family] ?? 99);
+      if (fr !== 0) return fr;
+      const sr = (scopeRank[a.scope] ?? 99) - (scopeRank[b.scope] ?? 99);
+      if (sr !== 0) return sr;
+      return a.address.localeCompare(b.address);
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      {networks.map((net) => (
+        <div key={net}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            {net}
+          </div>
+          <ul className="mt-1 space-y-0.5">
+            {grouped.get(net)!.map((e, idx) => (
+              <li key={`${net}-${idx}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="break-all">{e.address}</span>
+                {(e.family || e.scope) && (
+                  <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                    ({[e.family, e.scope].filter(Boolean).join(" ")})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function renderKeyValueRecord(obj: Record<string, unknown>) {
+  const entries = Object.entries(obj)
+    .filter(([, v]) => v !== null && v !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (entries.length === 0) return <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+      <table className="w-full text-xs">
+        <tbody>
+          {entries.map(([k, v]) => (
+            <tr key={k} className="border-b border-[hsl(var(--border))] last:border-0">
+              <td className="w-1/3 bg-[hsl(var(--muted))] px-2 py-1.5 font-medium text-[hsl(var(--muted-foreground))] align-top">
+                <span className="break-all">{k}</span>
+              </td>
+              <td className="px-2 py-1.5 align-top">
+                {typeof v === "string" ? (
+                  <span className="break-all">{v}</span>
+                ) : (typeof v === "number" || typeof v === "boolean") ? (
+                  <span>{String(v)}</span>
+                ) : (
+                  <pre className="whitespace-pre-wrap break-words">{JSON.stringify(v, null, 2)}</pre>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function renderDockerPorts(val: unknown) {
+  // Docker inspect: NetworkSettings.Ports is an object like:
+  // { "80/tcp": [ { HostIp, HostPort } ], "443/tcp": null }
+  if (!isPlainRecord(val)) return null;
+  const entries = Object.entries(val).sort(([a], [b]) => a.localeCompare(b));
+
+  return (
+    <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+      <table className="w-full text-xs">
+        <tbody>
+          {entries.map(([containerPort, bindings]) => {
+            let rendered: ReactNode = <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+
+            if (Array.isArray(bindings)) {
+              const rows = bindings
+                .filter((b) => !!b && typeof b === "object")
+                .map((b) => b as Record<string, unknown>)
+                .map((b) => ({
+                  hostIp: typeof b.HostIp === "string" ? b.HostIp : "",
+                  hostPort: typeof b.HostPort === "string" ? b.HostPort : "",
+                }))
+                .filter((x) => x.hostIp || x.hostPort);
+
+              if (rows.length > 0) {
+                rendered = (
+                  <div className="space-y-0.5">
+                    {rows.map((r, idx) => (
+                      <div key={idx} className="break-all">
+                        {r.hostIp ? `${r.hostIp}:` : ""}{r.hostPort || "?"}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+            } else if (bindings === null) {
+              rendered = <span className="text-[hsl(var(--muted-foreground))]">not published</span>;
+            }
+
+            return (
+              <tr key={containerPort} className="border-b border-[hsl(var(--border))] last:border-0">
+                <td className="w-1/3 bg-[hsl(var(--muted))] px-2 py-1.5 font-medium text-[hsl(var(--muted-foreground))] align-top">
+                  <span className="break-all">{containerPort}</span>
+                </td>
+                <td className="px-2 py-1.5 align-top">{rendered}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function renderMetaValue(key: string, val: unknown) {
-  if (key === "ips" && Array.isArray(val) && val.every(isIpMetaEntry)) {
-    return renderIpMeta(val);
+  if (key === "ips" && Array.isArray(val)) {
+    if (val.every(isIpMetaEntry)) return renderIpMeta(val);
+    if (val.every(isDockerIpMetaEntry)) return renderDockerIpMeta(val);
   }
 
   if (typeof val === "string") return <span className="break-all">{val}</span>;
   if (typeof val === "number" || typeof val === "boolean") return <span>{String(val)}</span>;
+
+  if (key === "labels" && isPlainRecord(val)) {
+    return renderKeyValueRecord(val);
+  }
+
+  if (key === "ports") {
+    const ports = renderDockerPorts(val);
+    if (ports) return ports;
+  }
+
+  if (isPlainRecord(val)) {
+    return renderKeyValueRecord(val);
+  }
 
   return (
     <pre className="whitespace-pre-wrap break-words text-xs">
@@ -154,9 +333,43 @@ const kindColors: Record<string, string> = {
 };
 
 export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetailDialogProps) {
+  const [parentNode, setParentNode] = useState<NodePublic | null>(null);
+  const [children, setChildren] = useState<NodePublic[]>([]);
+  const [relLoading, setRelLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRelations() {
+      if (!open || !node) return;
+      setRelLoading(true);
+      setParentNode(null);
+      setChildren([]);
+
+      try {
+        const [parentRes, childrenRes] = await Promise.all([
+          node.parent_node_id ? api.nodes.get(node.team_id, node.parent_node_id).catch(() => null) : Promise.resolve(null),
+          api.nodes.list(node.team_id, { parent_id: node.id, limit: 200 }).catch(() => []),
+        ]);
+
+        if (cancelled) return;
+        setParentNode(parentRes);
+        setChildren(childrenRes);
+      } finally {
+        if (!cancelled) setRelLoading(false);
+      }
+    }
+
+    loadRelations();
+    return () => { cancelled = true; };
+  }, [open, node?.id, node?.team_id, node?.parent_node_id]);
+
   if (!open || !node) return null;
 
   const metaEntries = Object.entries(node.meta).filter(([, v]) => v !== null && v !== undefined);
+  const parentHint = typeof (node.meta as Record<string, unknown>).parent_hostname === "string"
+    ? String((node.meta as Record<string, unknown>).parent_hostname)
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -238,6 +451,80 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                 {node.notes}
               </div>
             </Field>
+          )}
+
+          {/* Relationships */}
+          {(relLoading || node.parent_node_id || parentHint || children.length > 0) && (
+            <div className="rounded-lg border border-[hsl(var(--border))] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  Relationships
+                </div>
+                {relLoading && <Spinner className="h-4 w-4" />}
+              </div>
+
+              {node.parent_node_id && (
+                <Field label="Parent">
+                  {parentNode ? (
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-medium">{parentNode.name}</div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        {parentNode.hostname ?? parentNode.ip ?? parentNode.id}
+                      </div>
+                    </div>
+                  ) : (
+                    <CopyableValue value={node.parent_node_id} />
+                  )}
+                </Field>
+              )}
+
+              {!node.parent_node_id && parentHint && (
+                <Field label="Parent (hint)">
+                  <CopyableValue value={parentHint} />
+                </Field>
+              )}
+
+              {children.length > 0 && (
+                <Field label={`Children (${children.length})`}>
+                  <div className="mt-1 overflow-hidden rounded-md border border-[hsl(var(--border))]">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {children.map((c) => (
+                          <tr key={c.id} className="border-b border-[hsl(var(--border))] last:border-0">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{c.name}</span>
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${kindColors[c.kind] ?? kindColors.other}`}>
+                                  {c.kind}
+                                </span>
+                              </div>
+                              {(c.hostname || c.ip) && (
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                  {c.hostname ?? c.ip}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  onOpenChange(false);
+                                  onEdit(c);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Field>
+              )}
+            </div>
           )}
 
           {/* Meta */}

@@ -34,6 +34,7 @@ class NodeRegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     kind: str = Field(default="device", max_length=30)
     hostname: str | None = Field(default=None, max_length=255)
+    parent_hostname: str | None = Field(default=None, max_length=255)
     ip: str | None = Field(default=None, max_length=64)
     url: str | None = Field(default=None, max_length=2048)
     tags: list[str] = Field(default_factory=list)

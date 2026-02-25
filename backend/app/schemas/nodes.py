@@ -10,6 +10,7 @@ class NodeCreate(BaseModel):
     kind: str = Field(default="device", max_length=30)
     name: str = Field(min_length=1, max_length=200)
     hostname: str | None = Field(default=None, max_length=255)
+    parent_node_id: uuid.UUID | None = None
     ip: str | None = Field(default=None, max_length=64)
     url: str | None = Field(default=None, max_length=2048)
     tags: list[str] = Field(default_factory=list)
@@ -21,6 +22,7 @@ class NodeUpdate(BaseModel):
     kind: str | None = Field(default=None, max_length=30)
     name: str | None = Field(default=None, max_length=200)
     hostname: str | None = Field(default=None, max_length=255)
+    parent_node_id: uuid.UUID | None = None
     ip: str | None = Field(default=None, max_length=64)
     url: str | None = Field(default=None, max_length=2048)
     tags: list[str] | None = None
@@ -33,6 +35,7 @@ class NodeUpdate(BaseModel):
 class NodePublic(BaseModel):
     id: uuid.UUID
     team_id: uuid.UUID
+    parent_node_id: uuid.UUID | None
     kind: str
     name: str
     hostname: str | None

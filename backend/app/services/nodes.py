@@ -13,10 +13,13 @@ async def list_nodes(
     *,
     team_id: uuid.UUID,
     q: str | None = None,
+    parent_id: uuid.UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Node]:
     stmt = select(Node).where(Node.team_id == team_id).order_by(Node.updated_at.desc())
+    if parent_id is not None:
+        stmt = stmt.where(Node.parent_node_id == parent_id)
     if q:
         like = f"%{q.strip()}%"
         stmt = stmt.where(

@@ -4,7 +4,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -141,6 +141,26 @@ async def register_or_update_node_with_token(
     Returns: (node, created)
       - node is None only when allow_create=False and no existing node matched.
     """
+    explicit_parent_hostname = data.pop("parent_hostname", None)
+    meta_incoming = data.get("meta") or {}
+    inferred_parent_hostname = (
+        explicit_parent_hostname
+        or (meta_incoming.get("parent_hostname") if isinstance(meta_incoming, dict) else None)
+        or (meta_incoming.get("docker_host") if isinstance(meta_incoming, dict) else None)
+        or (meta_incoming.get("lxd_host") if isinstance(meta_incoming, dict) else None)
+    )
+
+    parent_hostname = inferred_parent_hostname if isinstance(inferred_parent_hostname, str) and inferred_parent_hostname else None
+
+    parent: Node | None = None
+    if parent_hostname:
+        res = await db.execute(
+            select(Node)
+            .where(Node.team_id == rt.team_id)
+            .where(or_(Node.hostname == parent_hostname, Node.name == parent_hostname))
+        )
+        parent = res.scalar_one_or_none()
+
     existing = await _find_existing_node_for_registration(db, team_id=rt.team_id, data=data)
     now = datetime.now(timezone.utc)
 
@@ -154,6 +174,26 @@ async def register_or_update_node_with_token(
         existing.notes = data.get("notes", existing.notes)
         existing.tags = _merge_unique_strs(existing.tags, data.get("tags"))
         existing.meta = {**(existing.meta or {}), **(data.get("meta") or {})}
+
+        # Resolve parent again, excluding self, in case we matched ourselves by name/hostname.
+        if parent and parent.id == existing.id:
+            parent = None
+        if parent_hostname and parent is None:
+            res = await db.execute(
+                select(Node)
+                .where(Node.team_id == rt.team_id)
+                .where(Node.id != existing.id)
+                .where(or_(Node.hostname == parent_hostname, Node.name == parent_hostname))
+            )
+            parent = res.scalar_one_or_none()
+
+        if parent:
+            existing.parent_node_id = parent.id
+            if existing.meta.get("parent_hostname") == parent_hostname:
+                existing.meta.pop("parent_hostname", None)
+        elif parent_hostname and existing.parent_node_id is None:
+            existing.meta.setdefault("parent_hostname", parent_hostname)
+
         # Avoid async lazy-load during response serialization (MissingGreenlet)
         # by ensuring updated_at is populated in-memory.
         existing.updated_at = now
@@ -164,6 +204,13 @@ async def register_or_update_node_with_token(
 
     if not allow_create:
         return None, False
+
+    if parent:
+        data["parent_node_id"] = parent.id
+    elif parent_hostname:
+        meta = dict(data.get("meta") or {})
+        meta.setdefault("parent_hostname", parent_hostname)
+        data["meta"] = meta
 
     node = Node(team_id=rt.team_id, **data)
     node.last_seen_at = now

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search, Server, Pencil, Trash2, Tags, X } from "lucide-react";
+import { Plus, Search, Server, Pencil, Trash2, Tags, X, ChevronDown, ChevronRight } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { api, type NodePublic } from "@/lib/api";
@@ -19,6 +19,8 @@ export default function NodesPage() {
   const [nodes, setNodes] = useState<NodePublic[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<NodePublic | null>(null);
   const [viewing, setViewing] = useState<NodePublic | null>(null);
@@ -42,7 +44,10 @@ export default function NodesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => { setSelectedIds(new Set()); }, [activeTeam, query]);
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setExpandedIds(new Set());
+  }, [activeTeam, query]);
 
   const allSelected = nodes.length > 0 && selectedIds.size === nodes.length;
   const someSelected = selectedIds.size > 0;
@@ -126,6 +131,81 @@ export default function NodesPage() {
     other: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
   };
 
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string, NodePublic[]>();
+    for (const n of nodes) {
+      if (!n.parent_node_id) continue;
+      const list = m.get(n.parent_node_id) ?? [];
+      list.push(n);
+      m.set(n.parent_node_id, list);
+    }
+    for (const list of m.values()) {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return m;
+  }, [nodes]);
+
+  const rootNodes = useMemo(() => {
+    // A "root" is either explicitly root (no parent) or an orphan whose parent isn't loaded.
+    return nodes
+      .filter((n) => !n.parent_node_id || !nodesById.has(n.parent_node_id))
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [nodes, nodesById]);
+
+  const allExpandableIds = useMemo(() => new Set(childrenByParent.keys()), [childrenByParent]);
+
+  const displayRows = useMemo(() => {
+    type Row = {
+      node: NodePublic;
+      depth: number;
+      hasChildren: boolean;
+      expanded: boolean;
+      childCount: number;
+    };
+
+    if (viewMode === "flat") {
+      return nodes
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((node): Row => {
+          const childCount = childrenByParent.get(node.id)?.length ?? 0;
+          return {
+            node,
+            depth: 0,
+            hasChildren: childCount > 0,
+            expanded: false,
+            childCount,
+          };
+        });
+    }
+
+    const rows: Row[] = [];
+    const visited = new Set<string>();
+
+    function pushNode(node: NodePublic, depth: number) {
+      if (visited.has(node.id)) return;
+      visited.add(node.id);
+
+      const children = childrenByParent.get(node.id) ?? [];
+      const childCount = children.length;
+      const hasChildren = childCount > 0;
+      const expanded = expandedIds.has(node.id);
+
+      rows.push({ node, depth, hasChildren, expanded, childCount });
+
+      if (hasChildren && expanded) {
+        for (const child of children) pushNode(child, depth + 1);
+      }
+    }
+
+    for (const root of rootNodes) pushNode(root, 0);
+
+    return rows;
+  }, [viewMode, nodes, rootNodes, childrenByParent, expandedIds]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -144,6 +224,45 @@ export default function NodesPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant={viewMode === "grouped" ? "default" : "outline"}
+          onClick={() => setViewMode("grouped")}
+        >
+          Grouped
+        </Button>
+        <Button
+          size="sm"
+          variant={viewMode === "flat" ? "default" : "outline"}
+          onClick={() => setViewMode("flat")}
+        >
+          Flat
+        </Button>
+
+        {viewMode === "grouped" && (
+          <>
+            <div className="mx-1 h-6 w-px bg-[hsl(var(--border))]" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExpandedIds(new Set(allExpandableIds))}
+              disabled={allExpandableIds.size === 0}
+            >
+              Expand all
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExpandedIds(new Set())}
+              disabled={expandedIds.size === 0}
+            >
+              Collapse all
+            </Button>
+          </>
+        )}
       </div>
 
       {someSelected && (
@@ -229,7 +348,7 @@ export default function NodesPage() {
               </tr>
             </thead>
             <tbody>
-              {nodes.map((node) => {
+              {displayRows.map(({ node, depth, hasChildren, expanded, childCount }) => {
                 const checked = selectedIds.has(node.id);
                 return (
                   <tr
@@ -245,13 +364,44 @@ export default function NodesPage() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setViewing(node)}
-                        className="text-left font-medium hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
-                      >
-                        {node.name}
-                      </button>
-                      {node.url && <div className="truncate text-xs text-[hsl(var(--muted-foreground))]">{node.url}</div>}
+                      <div className="flex items-start gap-2" style={viewMode === "grouped" ? { paddingLeft: depth * 16 } : undefined}>
+                        {viewMode === "grouped" ? (
+                          hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(node.id)) next.delete(node.id);
+                                  else next.add(node.id);
+                                  return next;
+                                })
+                              }
+                              className="mt-0.5 rounded p-0.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
+                              title={expanded ? "Collapse" : "Expand"}
+                            >
+                              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </button>
+                          ) : (
+                            <div className="h-5 w-5" />
+                          )
+                        ) : null}
+
+                        <div className="min-w-0">
+                          <button
+                            onClick={() => setViewing(node)}
+                            className="text-left font-medium hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+                          >
+                            {node.name}
+                          </button>
+                          {viewMode === "grouped" && hasChildren && (
+                            <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+                              ({childCount})
+                            </span>
+                          )}
+                          {node.url && <div className="truncate text-xs text-[hsl(var(--muted-foreground))]">{node.url}</div>}
+                        </div>
+                      </div>
                     </td>
                     <td className="hidden px-4 py-3 sm:table-cell">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${kindColors[node.kind] ?? kindColors.other}`}>

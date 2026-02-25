@@ -113,6 +113,7 @@ export interface RegistrationTokenPublic {
 export interface NodePublic {
   id: string;
   team_id: string;
+  parent_node_id: string | null;
   kind: string;
   name: string;
   hostname: string | null;
@@ -263,9 +264,10 @@ export const api = {
     count(teamId: string) {
       return request<{ count: number }>(`/api/teams/${teamId}/nodes/count`);
     },
-    list(teamId: string, params?: { q?: string; limit?: number; offset?: number }) {
+    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number }) {
       const qs = new URLSearchParams();
       if (params?.q) qs.set("q", params.q);
+      if (params?.parent_id) qs.set("parent_id", params.parent_id);
       if (params?.limit) qs.set("limit", String(params.limit));
       if (params?.offset) qs.set("offset", String(params.offset));
       const q = qs.toString();
