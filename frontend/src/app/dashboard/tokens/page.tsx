@@ -528,21 +528,25 @@ function NewTokenBanner({ token, onDismiss }: { token: string; onDismiss: () => 
   }
 
   return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
-            <KeyRound className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-sm font-semibold text-[hsl(var(--foreground))]">
+            <KeyRound className="h-4 w-4 text-[hsl(var(--primary))]" />
             Token created — copy it now!
           </div>
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
             This is the only time the full token will be shown.
           </p>
-          <div className="mt-2 break-all rounded-md bg-white p-2 font-mono text-xs text-amber-900 dark:bg-black/60 dark:text-amber-100">
+          <div className="mt-2 break-all rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2 font-mono text-xs text-[hsl(var(--foreground))]">
             {token}
           </div>
         </div>
-        <button type="button" onClick={onDismiss} className="text-amber-600 hover:text-amber-800 dark:text-amber-400">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>

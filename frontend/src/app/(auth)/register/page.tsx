@@ -44,6 +44,7 @@ function RegisterForm() {
   const [teamName, setTeamName] = useState("");
   const [website, setWebsite] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -93,7 +94,15 @@ function RegisterForm() {
       }
       router.push(next && next.startsWith("/") ? next : "/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
+      // Turnstile tokens are single-use; on any failure, force a fresh widget/token.
+      setTurnstileToken("");
+      setTurnstileKey((k) => k + 1);
+
+      if (err instanceof ApiError && err.status === 429) {
+        setError("Too many registration attempts. Please try again later.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Something went wrong");
+      }
     } finally {
       setBusy(false);
     }
@@ -212,7 +221,7 @@ function RegisterForm() {
             <input id="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
           </div>
 
-          <Turnstile onVerify={setTurnstileToken} onExpire={() => setTurnstileToken("")} />
+          <Turnstile key={turnstileKey} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken("")} />
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
           <Button type="submit" className="w-full" disabled={busy}>

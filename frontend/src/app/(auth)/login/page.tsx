@@ -30,6 +30,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [website, setWebsite] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
@@ -51,7 +52,15 @@ function LoginForm() {
       });
       router.push(next && next.startsWith("/") ? next : "/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong");
+      // Turnstile tokens are single-use; on any failure, force a fresh widget/token.
+      setTurnstileToken("");
+      setTurnstileKey((k) => k + 1);
+
+      if (err instanceof ApiError && err.status === 429) {
+        setError("Too many sign-in attempts. Please wait a minute and try again.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Something went wrong");
+      }
     } finally {
       setBusy(false);
     }
@@ -85,7 +94,7 @@ function LoginForm() {
             <input id="login-website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
           </div>
 
-          <Turnstile onVerify={setTurnstileToken} onExpire={() => setTurnstileToken("")} />
+          <Turnstile key={turnstileKey} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken("")} />
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
           <Button type="submit" className="w-full" disabled={busy}>
