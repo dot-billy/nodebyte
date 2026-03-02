@@ -2,23 +2,32 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Server, Users, Activity } from "lucide-react";
+import { Server, Users, Activity, Tag, Clock } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
-import { api, type NodePublic } from "@/lib/api";
+import { api, type NodePublic, type NodeStats } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export default function DashboardPage() {
   const { activeTeam, user } = useAuth();
   const [nodes, setNodes] = useState<NodePublic[]>([]);
-  const [nodeCount, setNodeCount] = useState(0);
+  const [stats, setStats] = useState<NodeStats | null>(null);
 
   useEffect(() => {
     if (!activeTeam) return;
-    api.nodes.count(activeTeam.id).then((r) => setNodeCount(r.count)).catch(() => {});
+    api.nodes.stats(activeTeam.id).then(setStats).catch(() => setStats(null));
     api.nodes.list(activeTeam.id, { limit: 5 }).then((n) => setNodes(n)).catch(() => {});
   }, [activeTeam]);
+
+  const byKind = stats?.by_kind ?? {};
+  const kindItems = [
+    { kind: "device", label: "Devices" },
+    { kind: "site", label: "Sites" },
+    { kind: "service", label: "Services" },
+    { kind: "other", label: "Other" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -38,7 +47,16 @@ export default function DashboardPage() {
             <Server className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{nodeCount}</div>
+            <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
+            {stats && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {kindItems.map((k) => (
+                  <Badge key={k.kind} variant="secondary" className="text-xs">
+                    {k.label}: {byKind[k.kind] ?? 0}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -52,14 +70,112 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Activity className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+            <CardTitle className="text-sm font-medium">Activity</CardTitle>
+            <Clock className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Healthy</div>
+            {stats ? (
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Seen (24h)</span>
+                  <span className="font-medium">{stats.last_seen.last_24h}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Seen (7d)</span>
+                  <span className="font-medium">{stats.last_seen.last_7d}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Seen (30d)</span>
+                  <span className="font-medium">{stats.last_seen.last_30d}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[hsl(var(--muted-foreground))]">Never seen</span>
+                  <span className="font-medium">{stats.last_seen.never}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-[hsl(var(--muted-foreground))]">—</div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {stats && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Top tags</CardTitle>
+              <Tag className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+            </CardHeader>
+            <CardContent>
+              {stats.top_tags.length === 0 ? (
+                <div className="text-sm text-[hsl(var(--muted-foreground))]">No tags yet.</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {stats.top_tags.map((t) => (
+                    <Badge key={t.tag} variant="outline" className="text-xs">
+                      {t.tag} <span className="ml-1 text-[hsl(var(--muted-foreground))]">({t.count})</span>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">IP footprint</CardTitle>
+              <Server className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary" className="text-xs">
+                  IPv4 nodes: {stats.ip_family_nodes.inet ?? 0}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  IPv6 nodes: {stats.ip_family_nodes.inet6 ?? 0}
+                </Badge>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                {stats.ip_segments.length === 0 ? (
+                  <div className="text-sm text-[hsl(var(--muted-foreground))]">No IP metadata yet.</div>
+                ) : (
+                  <div className="overflow-hidden rounded-md border border-[hsl(var(--border))]">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {stats.ip_segments.map((s) => (
+                          <tr key={s.segment} className="border-b border-[hsl(var(--border))] last:border-0">
+                            <td className="px-3 py-2 font-medium">{s.segment}</td>
+                            <td className="px-3 py-2 text-right text-[hsl(var(--muted-foreground))]">
+                              {s.node_count} node{s.node_count !== 1 ? "s" : ""} · {s.address_count} addr
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Status</CardTitle>
+              <Activity className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                Coming next: drilldowns (by kind/tag/host) and trend charts.
+              </div>
+              <div className="mt-3">
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/dashboard/nodes">Explore nodes</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Recent nodes</h2>

@@ -9,6 +9,7 @@
 # Optional:
 #   NODEBYTE_KIND    — node kind to register as (default: "device")
 #   NODEBYTE_TAGS    — comma-separated extra tags (default: none)
+#   NODEBYTE_PARENT_HOSTNAME — parent host node hostname (default: host FQDN)
 #   LXC_REMOTE       — lxc remote to query (default: local, i.e. no prefix)
 
 set -euo pipefail
@@ -25,6 +26,7 @@ done
 
 LXD_HOST="$(hostname)"
 LXD_HOST_FQDN="$(hostname -f 2>/dev/null || hostname)"
+PARENT_HOSTNAME="${NODEBYTE_PARENT_HOSTNAME:-$LXD_HOST_FQDN}"
 
 PREFIX=""
 [[ -n "$REMOTE" ]] && PREFIX="${REMOTE}:"
@@ -111,6 +113,7 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
     --arg name "$NAME" \
     --arg kind "$KIND" \
     --arg hostname "$HOSTNAME_VAL" \
+    --arg parent_hostname "$PARENT_HOSTNAME" \
     --arg ip "$IP" \
     --argjson tags "$TAGS" \
     --argjson meta "$META" \
@@ -119,10 +122,12 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
       name: $name,
       kind: $kind,
       hostname: $hostname,
+      parent_hostname: $parent_hostname,
       tags: $tags,
       meta: $meta
     }
-    | if .ip == "" then del(.ip) else . end'
+    | if .ip == "" then del(.ip) else . end
+    | if .parent_hostname == "" then del(.parent_hostname) else . end'
   )"
 
   printf "  %-30s %-12s %-8s %-16s " "$NAME" "$TYPE" "$STATUS" "${IP:-—}"

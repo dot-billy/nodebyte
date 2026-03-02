@@ -1,11 +1,12 @@
 "use client";
 
 import { ExternalLink, Copy, Check } from "lucide-react";
-import { useState } from "react";
-import type { NodePublic } from "@/lib/api";
+import { useEffect, useState, type ReactNode } from "react";
+import { api, type NodePublic } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 interface NodeDetailDialogProps {
   open: boolean;
@@ -14,7 +15,7 @@ interface NodeDetailDialogProps {
   onEdit: (node: NodePublic) => void;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   if (!children) return null;
   return (
     <div>
@@ -332,9 +333,43 @@ const kindColors: Record<string, string> = {
 };
 
 export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetailDialogProps) {
+  const [parentNode, setParentNode] = useState<NodePublic | null>(null);
+  const [children, setChildren] = useState<NodePublic[]>([]);
+  const [relLoading, setRelLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRelations() {
+      if (!open || !node) return;
+      setRelLoading(true);
+      setParentNode(null);
+      setChildren([]);
+
+      try {
+        const [parentRes, childrenRes] = await Promise.all([
+          node.parent_node_id ? api.nodes.get(node.team_id, node.parent_node_id).catch(() => null) : Promise.resolve(null),
+          api.nodes.list(node.team_id, { parent_id: node.id, limit: 200 }).catch(() => []),
+        ]);
+
+        if (cancelled) return;
+        setParentNode(parentRes);
+        setChildren(childrenRes);
+      } finally {
+        if (!cancelled) setRelLoading(false);
+      }
+    }
+
+    loadRelations();
+    return () => { cancelled = true; };
+  }, [open, node?.id, node?.team_id, node?.parent_node_id]);
+
   if (!open || !node) return null;
 
   const metaEntries = Object.entries(node.meta).filter(([, v]) => v !== null && v !== undefined);
+  const parentHint = typeof (node.meta as Record<string, unknown>).parent_hostname === "string"
+    ? String((node.meta as Record<string, unknown>).parent_hostname)
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -416,6 +451,80 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                 {node.notes}
               </div>
             </Field>
+          )}
+
+          {/* Relationships */}
+          {(relLoading || node.parent_node_id || parentHint || children.length > 0) && (
+            <div className="rounded-lg border border-[hsl(var(--border))] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  Relationships
+                </div>
+                {relLoading && <Spinner className="h-4 w-4" />}
+              </div>
+
+              {node.parent_node_id && (
+                <Field label="Parent">
+                  {parentNode ? (
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-medium">{parentNode.name}</div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        {parentNode.hostname ?? parentNode.ip ?? parentNode.id}
+                      </div>
+                    </div>
+                  ) : (
+                    <CopyableValue value={node.parent_node_id} />
+                  )}
+                </Field>
+              )}
+
+              {!node.parent_node_id && parentHint && (
+                <Field label="Parent (hint)">
+                  <CopyableValue value={parentHint} />
+                </Field>
+              )}
+
+              {children.length > 0 && (
+                <Field label={`Children (${children.length})`}>
+                  <div className="mt-1 overflow-hidden rounded-md border border-[hsl(var(--border))]">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {children.map((c) => (
+                          <tr key={c.id} className="border-b border-[hsl(var(--border))] last:border-0">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{c.name}</span>
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${kindColors[c.kind] ?? kindColors.other}`}>
+                                  {c.kind}
+                                </span>
+                              </div>
+                              {(c.hostname || c.ip) && (
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                  {c.hostname ?? c.ip}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  onOpenChange(false);
+                                  onEdit(c);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Field>
+              )}
+            </div>
           )}
 
           {/* Meta */}

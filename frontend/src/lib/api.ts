@@ -113,6 +113,7 @@ export interface RegistrationTokenPublic {
 export interface NodePublic {
   id: string;
   team_id: string;
+  parent_node_id: string | null;
   kind: string;
   name: string;
   hostname: string | null;
@@ -125,6 +126,27 @@ export interface NodePublic {
   last_seen_source: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface NodeLastSeenStats {
+  last_24h: number;
+  last_7d: number;
+  last_30d: number;
+  never: number;
+}
+
+export interface NodeStats {
+  total: number;
+  by_kind: Record<string, number>;
+  last_seen: NodeLastSeenStats;
+  top_tags: TagCount[];
+  ip_segments: { segment: string; node_count: number; address_count: number }[];
+  ip_family_nodes: Record<string, number>;
 }
 
 export interface PublicSettings {
@@ -263,9 +285,13 @@ export const api = {
     count(teamId: string) {
       return request<{ count: number }>(`/api/teams/${teamId}/nodes/count`);
     },
-    list(teamId: string, params?: { q?: string; limit?: number; offset?: number }) {
+    stats(teamId: string) {
+      return request<NodeStats>(`/api/teams/${teamId}/nodes/stats`);
+    },
+    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number }) {
       const qs = new URLSearchParams();
       if (params?.q) qs.set("q", params.q);
+      if (params?.parent_id) qs.set("parent_id", params.parent_id);
       if (params?.limit) qs.set("limit", String(params.limit));
       if (params?.offset) qs.set("offset", String(params.offset));
       const q = qs.toString();
