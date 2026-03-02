@@ -83,6 +83,8 @@ async def nodes_create(
 
     node = await create_node(db, team_id=team_id, data=data)
     await db.commit()
+    # Ensure DB-generated fields are loaded for serialization.
+    await db.refresh(node)
     return node
 
 
@@ -159,6 +161,8 @@ async def nodes_patch(
 
     node = await update_node(db, node=node, data=data)
     await db.commit()
+    # Ensure any server-side updates are loaded for serialization.
+    await db.refresh(node)
     return node
 
 
