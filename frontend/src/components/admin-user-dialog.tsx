@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { X, Trash2, Plus, Shield, ShieldOff, UserCheck, UserX } from "lucide-react";
 
-import { api, ApiError, type AdminUserRow, type AdminTeamBrief } from "@/lib/api";
+import { api, ApiError, type AdminUserRow, type AdminTeamBrief, type AdminTeamRow } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,10 +54,15 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [isActive, setIsActive] = useState(true);
 
-  const [addTeamName, setAddTeamName] = useState("");
   const [addTeamRole, setAddTeamRole] = useState("member");
   const [addingTeam, setAddingTeam] = useState(false);
   const [showAddTeam, setShowAddTeam] = useState(false);
+  const [teamsCatalog, setTeamsCatalog] = useState<AdminTeamRow[]>([]);
+  const [teamsCatalogLoading, setTeamsCatalogLoading] = useState(false);
+  const [teamsCatalogLoaded, setTeamsCatalogLoaded] = useState(false);
+  const [teamsCatalogError, setTeamsCatalogError] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
 
   const loadUser = useCallback(async () => {
     if (!userId) return;
@@ -80,6 +85,12 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
     if (!open) return;
     setError("");
     setShowAddTeam(false);
+    setTeamsCatalog([]);
+    setTeamsCatalogLoading(false);
+    setTeamsCatalogLoaded(false);
+    setTeamsCatalogError("");
+    setTeamFilter("");
+    setSelectedTeamIds([]);
     if (mode === "detail" && userId) {
       loadUser();
     } else {
@@ -91,6 +102,54 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
       setIsActive(true);
     }
   }, [open, mode, userId, loadUser]);
+
+  const loadTeamsCatalog = useCallback(async () => {
+    setTeamsCatalogLoading(true);
+    setTeamsCatalogError("");
+    try {
+      // Prefer listing all teams so admins don't have to guess names.
+      // Backend caps limit at 200, so page until exhausted.
+      const PAGE_SIZE = 200;
+      const MAX_TEAMS = 5000; // safety cap to avoid huge UI lists
+      const all: AdminTeamRow[] = [];
+      for (let offset = 0; offset < MAX_TEAMS; offset += PAGE_SIZE) {
+        const page = await api.admin.listTeams({ limit: PAGE_SIZE, offset });
+        all.push(...page);
+        if (page.length < PAGE_SIZE) break;
+      }
+      setTeamsCatalog(all);
+    } catch (err) {
+      setTeamsCatalogError(err instanceof ApiError ? err.message : "Failed to load teams. Please try again.");
+    } finally {
+      setTeamsCatalogLoaded(true);
+      setTeamsCatalogLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || mode !== "detail") return;
+    if (!showAddTeam) return;
+    if (teamsCatalogLoaded || teamsCatalogLoading) return;
+    loadTeamsCatalog();
+  }, [open, mode, showAddTeam, teamsCatalogLoaded, teamsCatalogLoading, loadTeamsCatalog]);
+
+  useEffect(() => {
+    if (!open || mode !== "detail") return;
+    if (!showAddTeam) return;
+    if (!user) return;
+    if (selectedTeamIds.length > 0) return;
+    if (teamsCatalogLoading) return;
+    if (teamsCatalog.length === 0) return;
+
+    const existingIds = new Set(user.teams.map((t) => t.id));
+    const available = teamsCatalog
+      .filter((t) => !existingIds.has(t.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (available.length > 0) {
+      setSelectedTeamIds([available[0].id]);
+    }
+  }, [open, mode, showAddTeam, user, selectedTeamIds.length, teamsCatalogLoading, teamsCatalog]);
 
   async function handleCreate() {
     setError("");
@@ -147,16 +206,33 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
     setAddingTeam(true);
     setError("");
     try {
-      const teams = await api.admin.listTeams({ q: addTeamName, limit: 10 });
-      if (teams.length === 0) {
-        setError("No team found matching that name");
+      if (selectedTeamIds.length === 0) {
+        setError("Select at least one team");
         setAddingTeam(false);
         return;
       }
-      await api.admin.addMember(teams[0].id, { email: user?.email ?? "", role: addTeamRole });
+
+      const userEmail = user?.email ?? "";
+      let ok = 0;
+      for (const teamId of selectedTeamIds) {
+        try {
+          await api.admin.addMember(teamId, { email: userEmail, role: addTeamRole });
+          ok += 1;
+        } catch {
+          // keep going; we'll show a summary if anything failed
+        }
+      }
+
+      if (ok === 0) {
+        setError("Failed to add user to the selected team(s)");
+        setAddingTeam(false);
+        return;
+      }
+
       setShowAddTeam(false);
-      setAddTeamName("");
       setAddTeamRole("member");
+      setTeamFilter("");
+      setSelectedTeamIds([]);
       await loadUser();
       onSaved();
     } catch (err) {
@@ -261,15 +337,127 @@ export function AdminUserDialog({ mode, userId, open, onClose, onSaved }: Props)
 
                   {showAddTeam && (
                     <div className="rounded-lg border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 p-3">
-                      <div className="flex gap-2">
-                        <Input placeholder="Team name..." value={addTeamName} onChange={(e) => setAddTeamName(e.target.value)} className="flex-1 h-8 text-sm" />
-                        <select value={addTeamRole} onChange={(e) => setAddTeamRole(e.target.value)} className="h-8 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 text-xs">
-                          {ROLES.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-                        </select>
-                        <Button size="sm" className="h-8" onClick={handleAddToTeam} disabled={addingTeam || !addTeamName}>
-                          {addingTeam ? <Spinner className="h-3.5 w-3.5" /> : "Add"}
-                        </Button>
-                      </div>
+                      {teamsCatalogLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+                          <Spinner className="h-3.5 w-3.5" /> Loading teams...
+                        </div>
+                      ) : teamsCatalogError ? (
+                        <div className="space-y-2">
+                          <div className="text-sm text-red-600 dark:text-red-400">{teamsCatalogError}</div>
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => {
+                                setTeamsCatalogLoaded(false);
+                                loadTeamsCatalog();
+                              }}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        (() => {
+                          const existingIds = new Set(user.teams.map((t) => t.id));
+                          const available = teamsCatalog
+                            .filter((t) => !existingIds.has(t.id))
+                            .filter((t) => {
+                              if (!teamFilter.trim()) return true;
+                              const q = teamFilter.trim().toLowerCase();
+                              return t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q);
+                            })
+                            .sort((a, b) => a.name.localeCompare(b.name));
+
+                          if (available.length === 0) {
+                            return (
+                              <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                No available teams to add (or your filter matches none).
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Filter teams (optional)…"
+                                value={teamFilter}
+                                onChange={(e) => setTeamFilter(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <div className="sm:col-span-2">
+                                  <Label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Teams</Label>
+                                  <div className="mt-1 overflow-hidden rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))]">
+                                    <div className="max-h-48 overflow-y-auto">
+                                      {available.map((t) => {
+                                        const checked = selectedTeamIds.includes(t.id);
+                                        return (
+                                          <label
+                                            key={t.id}
+                                            className="flex cursor-pointer items-start gap-2 border-b border-[hsl(var(--border))] px-3 py-2 last:border-b-0 hover:bg-[hsl(var(--muted))]/60"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={checked}
+                                              onChange={() => {
+                                                setSelectedTeamIds((prev) =>
+                                                  checked ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                                                );
+                                              }}
+                                              className="mt-0.5 h-4 w-4 rounded border-[hsl(var(--border))] accent-[hsl(var(--primary))]"
+                                            />
+                                            <div className="min-w-0">
+                                              <div className="truncate text-sm font-medium text-[hsl(var(--foreground))]">
+                                                {t.name}
+                                              </div>
+                                              <div className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                                                {t.slug}
+                                              </div>
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-[hsl(var(--muted-foreground))]">
+                                    Select one or more teams, then click Add.
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <Label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Role</Label>
+                                  <select
+                                    value={addTeamRole}
+                                    onChange={(e) => setAddTeamRole(e.target.value)}
+                                    className="mt-1 h-9 w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 text-xs text-[hsl(var(--foreground))]"
+                                  >
+                                    {ROLES.map((r) => (
+                                      <option key={r} value={r}>
+                                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  className="h-8"
+                                  onClick={handleAddToTeam}
+                                  disabled={addingTeam || selectedTeamIds.length === 0}
+                                >
+                                  {addingTeam ? <Spinner className="h-3.5 w-3.5" /> : "Add"}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
 
