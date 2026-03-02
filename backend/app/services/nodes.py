@@ -154,6 +154,44 @@ async def get_node(db: AsyncSession, *, team_id: uuid.UUID, node_id: uuid.UUID) 
     res = await db.execute(select(Node).where(Node.team_id == team_id).where(Node.id == node_id))
     return res.scalar_one_or_none()
 
+async def validate_parent_node_id(
+    db: AsyncSession,
+    *,
+    team_id: uuid.UUID,
+    node_id: uuid.UUID | None,
+    parent_node_id: uuid.UUID | None,
+) -> None:
+    if parent_node_id is None:
+        return
+
+    parent = await get_node(db, team_id=team_id, node_id=parent_node_id)
+    if not parent:
+        raise ValueError("Parent node not found")
+
+    # For create flows we only need to validate existence in-team.
+    if node_id is None:
+        return
+
+    if parent_node_id == node_id:
+        raise ValueError("A node cannot be its own parent")
+
+    # Prevent cycles by walking up the parent chain starting at the proposed parent.
+    seen: set[uuid.UUID] = set()
+    current: uuid.UUID | None = parent_node_id
+    while current is not None:
+        if current == node_id:
+            raise ValueError("This parent would create a cycle")
+        if current in seen:
+            raise ValueError("Cycle detected in existing relationships")
+        seen.add(current)
+
+        res = await db.execute(
+            select(Node.parent_node_id)
+            .where(Node.team_id == team_id)
+            .where(Node.id == current)
+        )
+        current = res.scalar_one_or_none()
+
 
 async def create_node(db: AsyncSession, *, team_id: uuid.UUID, data: dict) -> Node:
     node = Node(team_id=team_id, **data)

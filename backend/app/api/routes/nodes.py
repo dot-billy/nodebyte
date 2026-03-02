@@ -21,6 +21,7 @@ from app.services.nodes import (
     get_node,
     list_nodes,
     update_node,
+    validate_parent_node_id,
 )
 
 router = APIRouter(prefix="/teams/{team_id}/nodes", tags=["nodes"])
@@ -69,7 +70,18 @@ async def nodes_create(
     db: AsyncSession = Depends(get_db),
 ) -> Node:
     await require_role(db, user=user, team_id=team_id, min_role="member")
-    node = await create_node(db, team_id=team_id, data=payload.model_dump())
+    data = payload.model_dump()
+    try:
+        await validate_parent_node_id(
+            db,
+            team_id=team_id,
+            node_id=None,
+            parent_node_id=data.get("parent_node_id"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    node = await create_node(db, team_id=team_id, data=data)
     await db.commit()
     return node
 
@@ -133,6 +145,18 @@ async def nodes_patch(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
     data = payload.model_dump(exclude_unset=True)
+
+    if "parent_node_id" in data:
+        try:
+            await validate_parent_node_id(
+                db,
+                team_id=team_id,
+                node_id=node.id,
+                parent_node_id=data.get("parent_node_id"),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     node = await update_node(db, node=node, data=data)
     await db.commit()
     return node

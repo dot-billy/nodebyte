@@ -21,6 +21,9 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
   const [name, setName] = useState("");
   const [kind, setKind] = useState("device");
   const [hostname, setHostname] = useState("");
+  const [parentNodeId, setParentNodeId] = useState<string>("");
+  const [parentOptions, setParentOptions] = useState<NodePublic[]>([]);
+  const [parentLoading, setParentLoading] = useState(false);
   const [ip, setIp] = useState("");
   const [url, setUrl] = useState("");
   const [tags, setTags] = useState("");
@@ -33,6 +36,7 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       setName(node.name);
       setKind(node.kind);
       setHostname(node.hostname ?? "");
+      setParentNodeId(node.parent_node_id ?? "");
       setIp(node.ip ?? "");
       setUrl(node.url ?? "");
       setTags(node.tags.join(", "));
@@ -41,6 +45,7 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       setName("");
       setKind("device");
       setHostname("");
+      setParentNodeId("");
       setIp("");
       setUrl("");
       setTags("");
@@ -48,6 +53,29 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
     }
     setError("");
   }, [node, open]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadParents() {
+      if (!open || !teamId) return;
+      setParentLoading(true);
+      try {
+        const data = await api.nodes.list(teamId, { limit: 200 });
+        if (cancelled) return;
+        const filtered = data.filter((n) => n.id !== node?.id);
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+        setParentOptions(filtered);
+      } catch {
+        if (!cancelled) setParentOptions([]);
+      } finally {
+        if (!cancelled) setParentLoading(false);
+      }
+    }
+
+    loadParents();
+    return () => { cancelled = true; };
+  }, [open, teamId, node?.id]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +86,7 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       name,
       kind,
       hostname: hostname || null,
+      parent_node_id: parentNodeId || null,
       ip: ip || null,
       url: url || null,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
@@ -126,6 +155,35 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
               <Label htmlFor="nd-ip">IP</Label>
               <Input id="nd-ip" value={ip} onChange={(e) => setIp(e.target.value)} placeholder="10.0.1.42" />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="nd-parent">Parent node</Label>
+              {parentLoading && <Spinner className="h-4 w-4" />}
+            </div>
+            <select
+              id="nd-parent"
+              className="flex h-10 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
+              value={parentNodeId}
+              onChange={(e) => setParentNodeId(e.target.value)}
+              disabled={parentLoading}
+            >
+              <option value="">— None —</option>
+              {parentNodeId && !parentOptions.some((p) => p.id === parentNodeId) && (
+                <option value={parentNodeId}>
+                  Current: {parentNodeId}
+                </option>
+              )}
+              {parentOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.kind})
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Use this to group nodes (parent/child). You can change it later.
+            </p>
           </div>
 
           <div className="space-y-2">
