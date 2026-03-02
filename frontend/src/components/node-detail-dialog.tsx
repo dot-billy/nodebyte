@@ -254,7 +254,7 @@ function renderDockerPorts(val: unknown) {
       <table className="w-full text-xs">
         <tbody>
           {entries.map(([containerPort, bindings]) => {
-            let rendered: ReactNode = <span className="text-[hsl(var(--muted-foreground))]">—</span>;
+            let rendered: React.ReactNode = <span className="text-[hsl(var(--muted-foreground))]">—</span>;
 
             if (Array.isArray(bindings)) {
               const rows = bindings
