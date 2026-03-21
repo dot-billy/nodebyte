@@ -12,7 +12,7 @@ import re
 import uuid
 from typing import Any
 
-from jose import JWTError
+from jwt import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,7 +104,7 @@ async def resolve_caller_level(
         if payload.get("typ") != "access":
             return VISIBILITY_LEVELS["public"]
         user_id = uuid.UUID(payload["sub"])
-    except (JWTError, KeyError, ValueError):
+    except (InvalidTokenError, KeyError, ValueError):
         return VISIBILITY_LEVELS["public"]
 
     user = await db.get(User, user_id)

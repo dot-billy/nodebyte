@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import time
 from collections import defaultdict
+from functools import lru_cache
 from threading import Lock
 
 from fastapi import HTTPException, Request, status
@@ -34,10 +36,32 @@ class _RateLimiter:
 _limiter = _RateLimiter()
 
 
+@lru_cache(maxsize=1)
+def _trusted_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    from app.core.config import settings
+
+    return [ipaddress.ip_network(cidr, strict=False) for cidr in settings.trusted_proxy_cidrs]
+
+
+def _is_trusted_proxy(host: str) -> bool:
+    """Check if the direct-connection IP is a trusted reverse proxy."""
+    networks = _trusted_networks()
+    if not networks:
+        return False
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in net for net in networks)
+
+
 def _client_ip(request: Request) -> str:
-    # Prefer explicit single-IP headers from common proxies/CDNs.
-    # (If you're behind a reverse proxy and it doesn't forward real client IPs,
-    # request.client.host will be the proxy IP and you'll rate-limit everyone together.)
+    direct_ip = request.client.host if request.client else "unknown"
+
+    # Only trust forwarded headers when the request comes from a known proxy.
+    if not _is_trusted_proxy(direct_ip):
+        return direct_ip
+
     cf_ip = request.headers.get("cf-connecting-ip")
     if cf_ip:
         return cf_ip.strip()
@@ -49,7 +73,8 @@ def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+
+    return direct_ip
 
 
 def rate_limit_register(request: Request) -> None:
