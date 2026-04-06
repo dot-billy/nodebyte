@@ -211,7 +211,7 @@ CLUSTER_META="$(jq -n \
 
 CLUSTER_TAGS="$(build_tags "kubernetes" "cluster")"
 
-register_node "$CLUSTER_NAME" "cluster" "$CLUSTER_HOSTNAME" "$PARENT_HOSTNAME" "" "$API_SERVER" "$CLUSTER_TAGS" "$CLUSTER_META"
+register_node "${CLUSTER_NAME} (cluster)" "cluster" "$CLUSTER_HOSTNAME" "$PARENT_HOSTNAME" "" "$API_SERVER" "$CLUSTER_TAGS" "$CLUSTER_META"
 echo ""
 
 # ── K8s Nodes ────────────────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ if should_collect "namespaces"; then
     fi
     TAGS="$(build_tags "${TAG_ARGS[@]}")"
 
-    register_node "$NS_NAME" "namespace" "$NS_HOSTNAME" "$CLUSTER_HOSTNAME" "" "" "$TAGS" "$META"
+    register_node "${NS_NAME} (ns)" "namespace" "$NS_HOSTNAME" "$CLUSTER_HOSTNAME" "" "" "$TAGS" "$META"
   done
   echo ""
 else
