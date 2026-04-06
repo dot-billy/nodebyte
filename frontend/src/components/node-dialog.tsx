@@ -141,6 +141,10 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
                 <option value="device">Device</option>
                 <option value="site">Site</option>
                 <option value="service">Service</option>
+                <option value="cluster">Cluster</option>
+                <option value="namespace">Namespace</option>
+                <option value="workload">Workload</option>
+                <option value="ingress">Ingress</option>
                 <option value="other">Other</option>
               </select>
             </div>

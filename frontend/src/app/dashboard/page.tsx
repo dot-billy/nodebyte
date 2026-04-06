@@ -26,6 +26,10 @@ export default function DashboardPage() {
     { kind: "device", label: "Devices" },
     { kind: "site", label: "Sites" },
     { kind: "service", label: "Services" },
+    { kind: "cluster", label: "Clusters" },
+    { kind: "namespace", label: "Namespaces" },
+    { kind: "workload", label: "Workloads" },
+    { kind: "ingress", label: "Ingresses" },
     { kind: "other", label: "Other" },
   ];
 

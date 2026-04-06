@@ -14,7 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 
 import { copyToClipboard } from "@/lib/utils";
 
-const NODE_KINDS = ["device", "site", "service", "other"];
+const NODE_KINDS = ["device", "site", "service", "cluster", "namespace", "workload", "ingress", "other"];
 
 function canManage(role: string | null | undefined) {
   return role === "owner" || role === "admin";
