@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import uuid
 
-from sqlalchemy import delete as sa_delete, func, or_, select, text
+from sqlalchemy import cast, delete as sa_delete, func, or_, select, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node import Node
@@ -16,6 +17,10 @@ async def list_nodes(
     team_id: uuid.UUID,
     q: str | None = None,
     parent_id: uuid.UUID | None = None,
+    kind: list[str] | None = None,
+    has_url: bool | None = None,
+    tags: list[str] | None = None,
+    is_orphan: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Node]:
@@ -32,6 +37,18 @@ async def list_nodes(
                 Node.url.ilike(like),
             )
         )
+    if kind:
+        stmt = stmt.where(Node.kind.in_(kind))
+    if has_url is True:
+        stmt = stmt.where(Node.url.isnot(None))
+    elif has_url is False:
+        stmt = stmt.where(Node.url.is_(None))
+    if tags:
+        stmt = stmt.where(Node.tags.op("@>")(cast(tags, JSONB)))
+    if is_orphan is True:
+        stmt = stmt.where(Node.parent_node_id.is_(None))
+    elif is_orphan is False:
+        stmt = stmt.where(Node.parent_node_id.isnot(None))
     stmt = stmt.limit(limit).offset(offset)
     res = await db.execute(stmt)
     return list(res.scalars().all())

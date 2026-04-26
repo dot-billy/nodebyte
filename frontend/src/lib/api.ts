@@ -288,12 +288,16 @@ export const api = {
     stats(teamId: string) {
       return request<NodeStats>(`/api/teams/${teamId}/nodes/stats`);
     },
-    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number }) {
+    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number; kind?: string[]; has_url?: boolean; tags?: string[]; is_orphan?: boolean }) {
       const qs = new URLSearchParams();
       if (params?.q) qs.set("q", params.q);
       if (params?.parent_id) qs.set("parent_id", params.parent_id);
       if (params?.limit) qs.set("limit", String(params.limit));
       if (params?.offset) qs.set("offset", String(params.offset));
+      if (params?.kind?.length) for (const k of params.kind) qs.append("kind", k);
+      if (params?.has_url !== undefined && params.has_url !== null) qs.set("has_url", String(params.has_url));
+      if (params?.tags?.length) for (const t of params.tags) qs.append("tags", t);
+      if (params?.is_orphan !== undefined && params.is_orphan !== null) qs.set("is_orphan", String(params.is_orphan));
       const q = qs.toString();
       return request<NodePublic[]>(`/api/teams/${teamId}/nodes${q ? `?${q}` : ""}`);
     },

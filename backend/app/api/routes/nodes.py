@@ -53,13 +53,21 @@ async def nodes_list(
     team_id: uuid.UUID,
     q: str | None = None,
     parent_id: uuid.UUID | None = Query(default=None),
+    kind: list[str] | None = Query(default=None),
+    has_url: bool | None = Query(default=None),
+    tags: list[str] | None = Query(default=None),
+    is_orphan: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Node]:
     await require_role(db, user=user, team_id=team_id, min_role="viewer")
-    return await list_nodes(db, team_id=team_id, q=q, parent_id=parent_id, limit=limit, offset=offset)
+    return await list_nodes(
+        db, team_id=team_id, q=q, parent_id=parent_id,
+        kind=kind, has_url=has_url, tags=tags, is_orphan=is_orphan,
+        limit=limit, offset=offset,
+    )
 
 
 @router.post("", response_model=NodePublic, status_code=201)

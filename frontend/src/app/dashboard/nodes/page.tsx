@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Search, Server, Pencil, Trash2, Tags, X, ChevronDown, ChevronRight } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
-import { api, type NodePublic } from "@/lib/api";
+import { api, type NodePublic, type NodeStats } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { NodeDialog } from "@/components/node-dialog";
 import { NodeDetailDialog } from "@/components/node-detail-dialog";
 import { BulkTagDialog } from "@/components/bulk-tag-dialog";
+import { NodeFilters, type NodeFilterState, emptyFilters, countActiveFilters } from "@/components/node-filters";
 
 export default function NodesPage() {
   const { activeTeam } = useAuth();
@@ -29,25 +30,41 @@ export default function NodesPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [tagDialogMode, setTagDialogMode] = useState<"add" | "remove" | null>(null);
 
+  const [filters, setFilters] = useState<NodeFilterState>(emptyFilters);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [stats, setStats] = useState<NodeStats | null>(null);
+
   const load = useCallback(async () => {
     if (!activeTeam) return;
     setLoading(true);
     try {
-      const data = await api.nodes.list(activeTeam.id, { q: query || undefined, limit: 200 });
+      const data = await api.nodes.list(activeTeam.id, {
+        q: query || undefined,
+        limit: 200,
+        kind: filters.kinds.length > 0 ? filters.kinds : undefined,
+        has_url: filters.hasUrl ?? undefined,
+        tags: filters.tags.length > 0 ? filters.tags : undefined,
+        is_orphan: filters.isOrphan ?? undefined,
+      });
       setNodes(data);
     } catch {
       setNodes([]);
     } finally {
       setLoading(false);
     }
-  }, [activeTeam, query]);
+  }, [activeTeam, query, filters]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (!activeTeam) return;
+    api.nodes.stats(activeTeam.id).then(setStats).catch(() => {});
+  }, [activeTeam]);
+
+  useEffect(() => {
     setSelectedIds(new Set());
     setExpandedIds(new Set());
-  }, [activeTeam, query]);
+  }, [activeTeam, query, filters]);
 
   const allSelected = nodes.length > 0 && selectedIds.size === nodes.length;
   const someSelected = selectedIds.size > 0;
@@ -226,6 +243,15 @@ export default function NodesPage() {
         />
       </div>
 
+      <NodeFilters
+        filters={filters}
+        onChange={setFilters}
+        open={filtersOpen}
+        onToggle={() => setFiltersOpen((v) => !v)}
+        availableTags={stats?.top_tags.map((t) => t.tag) ?? []}
+        availableKinds={stats ? Object.keys(stats.by_kind) : ["device", "site", "service", "other"]}
+      />
+
       <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
@@ -322,7 +348,7 @@ export default function NodesPage() {
           <CardContent className="py-16 text-center">
             <Server className="mx-auto h-10 w-10 text-[hsl(var(--muted-foreground))]" />
             <p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">
-              {query ? "No nodes match your search." : "No nodes yet. Click \"Add node\" to create one."}
+              {query || countActiveFilters(filters) > 0 ? "No nodes match your search or filters." : "No nodes yet. Click \"Add node\" to create one."}
             </p>
           </CardContent>
         </Card>
