@@ -3,6 +3,8 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -11,6 +13,7 @@ from app.db.session import get_db
 from app.models.node import Node
 from app.models.user import User
 from app.schemas.nodes import BulkActionResponse, BulkDeleteRequest, BulkTagRequest, NodeCreate, NodePublic, NodeStats, NodeUpdate
+from app.services.ansible_inventory import build_ansible_inventory
 from app.services.nodes import (
     bulk_delete_nodes,
     bulk_update_tags,
@@ -126,6 +129,41 @@ async def nodes_bulk_tag(
     )
     await db.commit()
     return BulkActionResponse(affected=affected)
+
+
+@router.get("/export/ansible")
+async def nodes_export_ansible(
+    team_id: uuid.UUID,
+    groups: list[str] = Query(default=["kind", "tag", "parent", "subnet"]),
+    q: str | None = None,
+    kind: list[str] | None = Query(default=None),
+    has_url: bool | None = Query(default=None),
+    tags: list[str] | None = Query(default=None),
+    is_orphan: bool | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    await require_role(db, user=user, team_id=team_id, min_role="viewer")
+    nodes = await list_nodes(
+        db, team_id=team_id, q=q, kind=kind, has_url=has_url,
+        tags=tags, is_orphan=is_orphan, limit=10000, offset=0,
+    )
+
+    parent_names: dict[uuid.UUID, str] = {}
+    if "parent" in groups:
+        parent_ids = {n.parent_node_id for n in nodes if n.parent_node_id}
+        if parent_ids:
+            stmt = select(Node.id, Node.name).where(Node.id.in_(parent_ids))
+            res = await db.execute(stmt)
+            parent_names = {row[0]: row[1] for row in res.all()}
+
+    inventory = build_ansible_inventory(
+        nodes, parent_names=parent_names, group_strategies=set(groups),
+    )
+    return JSONResponse(
+        content=inventory,
+        headers={"Content-Disposition": 'attachment; filename="inventory.json"'},
+    )
 
 
 @router.get("/{node_id}", response_model=NodePublic)
