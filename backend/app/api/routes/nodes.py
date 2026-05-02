@@ -144,6 +144,8 @@ async def nodes_export_ansible(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     await require_role(db, user=user, team_id=team_id, min_role="viewer")
+    if kind is None:
+        kind = ["device"]
     nodes = await list_nodes(
         db, team_id=team_id, q=q, kind=kind, has_url=has_url,
         tags=tags, is_orphan=is_orphan, limit=10000, offset=0,
