@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import rate_limit_register_node
 from app.db.session import get_db
 from app.schemas.nodes import NodePublic
 from app.schemas.registration_tokens import NodeRegisterRequest
@@ -14,9 +15,11 @@ router = APIRouter(tags=["node-registration"])
 @router.post("/register-node", response_model=NodePublic, status_code=201)
 async def register_node(
     payload: NodeRegisterRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    rate_limit_register_node(request)
     rt = await get_registration_token_by_value(db, token=payload.token)
     if not rt:
         raise HTTPException(status_code=401, detail="Invalid registration token")
