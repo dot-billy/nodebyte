@@ -24,9 +24,12 @@
 
 set -euo pipefail
 
-API="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}/api/register-node"
+BASE_URL="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}"
+API="${BASE_URL}/api/register-node"
+BATCH_API="${BASE_URL}/api/register-nodes"
 TOKEN="${NODEBYTE_TOKEN:?Set NODEBYTE_TOKEN before running this script}"
 EXTRA_TAGS="${NODEBYTE_TAGS:-}"
+NODEBYTE_BATCH="${NODEBYTE_BATCH:-1}"
 K8S_SKIP_SYSTEM="${K8S_SKIP_SYSTEM:-0}"
 K8S_NAMESPACES="${K8S_NAMESPACES:-}"
 K8S_RESOURCES="${K8S_RESOURCES:-nodes,namespaces,deployments,statefulsets,daemonsets,services,ingresses}"
@@ -39,6 +42,7 @@ MAX_HOSTNAME_LEN=255
 OK=0
 FAIL=0
 TOTAL=0
+BATCH_ITEMS='[]'
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,15 +80,11 @@ truncate_field() {
   fi
 }
 
-register_node() {
-  # Usage: register_node <name> <kind> <hostname> <parent_hostname> <ip> <url> <tags_json> <meta_json>
+_build_node_json() {
   local name="$1" kind="$2" hostname="$3" parent_hostname="$4" ip="$5" url="$6" tags="$7" meta="$8"
-
   name="$(truncate_field "$name" "$MAX_NAME_LEN")"
   hostname="$(truncate_field "$hostname" "$MAX_HOSTNAME_LEN")"
-
-  PAYLOAD="$(jq -n \
-    --arg token "$TOKEN" \
+  jq -n \
     --arg name "$name" \
     --arg kind "$kind" \
     --arg hostname "$hostname" \
@@ -94,7 +94,6 @@ register_node() {
     --argjson tags "$tags" \
     --argjson meta "$meta" \
     '{
-      token: $token,
       name: $name,
       kind: $kind,
       hostname: $hostname,
@@ -107,9 +106,24 @@ register_node() {
     | if .ip == "" then del(.ip) else . end
     | if .url == "" then del(.url) else . end
     | if .parent_hostname == "" then del(.parent_hostname) else . end'
-  )"
+}
+
+register_node() {
+  # Usage: register_node <name> <kind> <hostname> <parent_hostname> <ip> <url> <tags_json> <meta_json>
+  local name="$1" kind="$2" hostname="$3" parent_hostname="$4" ip="$5" url="$6" tags="$7" meta="$8"
 
   TOTAL=$((TOTAL + 1))
+
+  local NODE_JSON
+  NODE_JSON="$(_build_node_json "$name" "$kind" "$hostname" "$parent_hostname" "$ip" "$url" "$tags" "$meta")"
+
+  if [[ "$NODEBYTE_BATCH" == "1" ]]; then
+    BATCH_ITEMS="$(echo "$BATCH_ITEMS" | jq --argjson item "$NODE_JSON" '. + [$item]')"
+    printf "  %-40s %-12s queued\n" "$name" "$kind"
+    return
+  fi
+
+  PAYLOAD="$(echo "$NODE_JSON" | jq --arg token "$TOKEN" '. + {token: $token}')"
 
   printf "  %-40s %-12s " "$name" "$kind"
 
@@ -133,6 +147,45 @@ register_node() {
     echo "✗ failed (HTTP $HTTP_CODE) $MSG_ONELINE"
     FAIL=$((FAIL + 1))
   fi
+}
+
+flush_batch() {
+  local count
+  count="$(echo "$BATCH_ITEMS" | jq 'length')"
+  if [[ "$count" == "0" ]]; then
+    return
+  fi
+
+  echo ""
+  echo "Sending batch of $count nodes..."
+
+  PAYLOAD="$(jq -n --arg token "$TOKEN" --argjson nodes "$BATCH_ITEMS" \
+    '{token: $token, nodes: $nodes}')"
+
+  RESP="$(curl -sS -X POST "$BATCH_API" \
+    -H "Content-Type: application/json" \
+    -d "$PAYLOAD" \
+    -w '\n%{http_code}')"
+
+  BODY="${RESP%$'\n'*}"
+  HTTP_CODE="${RESP##*$'\n'}"
+
+  if [[ "$HTTP_CODE" == "200" ]]; then
+    local created updated skipped errors
+    created="$(echo "$BODY" | jq '.created')"
+    updated="$(echo "$BODY" | jq '.updated')"
+    skipped="$(echo "$BODY" | jq '.skipped')"
+    errors="$(echo "$BODY" | jq '.errors')"
+    OK=$((created + updated))
+    FAIL=$((skipped + errors))
+    echo "  ✓ $created created, $updated updated, $skipped skipped, $errors errors"
+  else
+    MSG="$(json_error_summary "$BODY")"
+    echo "  ✗ Batch failed (HTTP $HTTP_CODE): $MSG"
+    FAIL=$TOTAL
+  fi
+
+  BATCH_ITEMS='[]'
 }
 
 should_collect() {
@@ -632,6 +685,12 @@ if should_collect "ingresses"; then
     done
   done
   echo ""
+fi
+
+# ── Flush batch ─────────────────────────────────────────────────────────────
+
+if [[ "$NODEBYTE_BATCH" == "1" ]]; then
+  flush_batch
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
