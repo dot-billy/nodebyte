@@ -124,7 +124,10 @@ async def login(
 ) -> TokenResponse:
     _check_honeypot(payload.website)
     origin = request.headers.get("origin", "")
-    if not origin.startswith("chrome-extension://"):
+    user_agent = request.headers.get("user-agent", "")
+    is_extension = origin.startswith("chrome-extension://")
+    is_native_app = user_agent.startswith("NodebyteApp/")
+    if not (is_extension or is_native_app):
         await verify_turnstile(payload.cf_turnstile_token, request.client.host if request.client else None)
 
     user = await authenticate(db, email=payload.email, password=payload.password)
