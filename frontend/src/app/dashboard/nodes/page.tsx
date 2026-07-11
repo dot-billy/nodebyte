@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search, Server, Pencil, Trash2, Tags, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Search, Server, Pencil, Trash2, Tags, X, ChevronDown, ChevronRight, Download } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { api, type NodePublic, type NodeStats } from "@/lib/api";
@@ -141,6 +141,26 @@ export default function NodesPage() {
     load();
   }
 
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportAnsible() {
+    if (!activeTeam) return;
+    setExporting(true);
+    try {
+      await api.nodes.exportAnsible(activeTeam.id, {
+        q: query || undefined,
+        kind: filters.kinds.length > 0 ? filters.kinds : undefined,
+        tags: filters.tags.length > 0 ? filters.tags : undefined,
+        is_orphan: filters.isOrphan ?? undefined,
+        has_url: filters.hasUrl ?? undefined,
+      });
+    } catch {
+      // silent — the download either works or the user sees no file
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const kindColors: Record<string, string> = {
     device: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
     site: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
@@ -227,10 +247,22 @@ export default function NodesPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Nodes</h1>
-        <Button onClick={openCreate} size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          Add node
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleExportAnsible}
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={loading || nodes.length === 0 || exporting}
+          >
+            {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            Export Ansible
+          </Button>
+          <Button onClick={openCreate} size="sm" className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add node
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

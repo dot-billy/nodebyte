@@ -325,6 +325,39 @@ export const api = {
         body: JSON.stringify({ node_ids: nodeIds, add: add ?? [], remove: remove ?? [] }),
       });
     },
+    async exportAnsible(teamId: string, params?: {
+      groups?: string[];
+      q?: string;
+      kind?: string[];
+      tags?: string[];
+      is_orphan?: boolean;
+      has_url?: boolean;
+    }): Promise<void> {
+      const qs = new URLSearchParams();
+      if (params?.groups?.length) for (const g of params.groups) qs.append("groups", g);
+      if (params?.q) qs.set("q", params.q);
+      if (params?.kind?.length) for (const k of params.kind) qs.append("kind", k);
+      if (params?.tags?.length) for (const t of params.tags) qs.append("tags", t);
+      if (params?.is_orphan !== undefined && params.is_orphan !== null) qs.set("is_orphan", String(params.is_orphan));
+      if (params?.has_url !== undefined && params.has_url !== null) qs.set("has_url", String(params.has_url));
+      const q = qs.toString();
+      const url = `${BASE}/api/teams/${teamId}/nodes/export/ansible${q ? `?${q}` : ""}`;
+      const headers: Record<string, string> = {};
+      if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+      const res = await fetch(url, { headers, credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new ApiError(res.status, body);
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "inventory.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    },
   },
   admin: {
     stats() {

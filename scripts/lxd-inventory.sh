@@ -14,11 +14,15 @@
 
 set -euo pipefail
 
-API="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}/api/register-node"
+BASE_URL="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}"
+API="${BASE_URL}/api/register-node"
+BATCH_API="${BASE_URL}/api/register-nodes"
 TOKEN="${NODEBYTE_TOKEN:?Set NODEBYTE_TOKEN before running this script}"
 KIND="${NODEBYTE_KIND:-device}"
 EXTRA_TAGS="${NODEBYTE_TAGS:-}"
 REMOTE="${LXC_REMOTE:-}"
+NODEBYTE_BATCH="${NODEBYTE_BATCH:-1}"
+BATCH_ITEMS='[]'
 
 for cmd in lxc jq curl; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Error: $cmd is required but not installed." >&2; exit 1; }
@@ -108,8 +112,7 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
 
   HOSTNAME_VAL="${NAME}.${LXD_HOST_FQDN}"
 
-  PAYLOAD="$(jq -n \
-    --arg token "$TOKEN" \
+  NODE_JSON="$(jq -n \
     --arg name "$NAME" \
     --arg kind "$KIND" \
     --arg hostname "$HOSTNAME_VAL" \
@@ -118,7 +121,6 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
     --argjson tags "$TAGS" \
     --argjson meta "$META" \
     '{
-      token: $token,
       name: $name,
       kind: $kind,
       hostname: $hostname,
@@ -130,23 +132,63 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
     | if .parent_hostname == "" then del(.parent_hostname) else . end'
   )"
 
-  printf "  %-30s %-12s %-8s %-16s " "$NAME" "$TYPE" "$STATUS" "${IP:-—}"
-
-  HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD")"
-
-  if [[ "$HTTP_CODE" == "201" ]]; then
-    echo "✓ registered"
-    OK=$((OK + 1))
-  elif [[ "$HTTP_CODE" == "200" ]]; then
-    echo "↻ updated"
-    OK=$((OK + 1))
+  if [[ "$NODEBYTE_BATCH" == "1" ]]; then
+    BATCH_ITEMS="$(echo "$BATCH_ITEMS" | jq --argjson item "$NODE_JSON" '. + [$item]')"
+    printf "  %-30s %-12s %-8s %-16s queued\n" "$NAME" "$TYPE" "$STATUS" "${IP:-—}"
   else
-    echo "✗ failed (HTTP $HTTP_CODE)"
-    FAIL=$((FAIL + 1))
+    PAYLOAD="$(echo "$NODE_JSON" | jq --arg token "$TOKEN" '. + {token: $token}')"
+
+    printf "  %-30s %-12s %-8s %-16s " "$NAME" "$TYPE" "$STATUS" "${IP:-—}"
+
+    HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API" \
+      -H "Content-Type: application/json" \
+      -d "$PAYLOAD")"
+
+    if [[ "$HTTP_CODE" == "201" ]]; then
+      echo "✓ registered"
+      OK=$((OK + 1))
+    elif [[ "$HTTP_CODE" == "200" ]]; then
+      echo "↻ updated"
+      OK=$((OK + 1))
+    else
+      echo "✗ failed (HTTP $HTTP_CODE)"
+      FAIL=$((FAIL + 1))
+    fi
   fi
 done
 
+if [[ "$NODEBYTE_BATCH" == "1" ]]; then
+  BATCH_COUNT="$(echo "$BATCH_ITEMS" | jq 'length')"
+  if [[ "$BATCH_COUNT" != "0" ]]; then
+    echo ""
+    echo "Sending batch of $BATCH_COUNT nodes..."
+
+    PAYLOAD="$(jq -n --arg token "$TOKEN" --argjson nodes "$BATCH_ITEMS" \
+      '{token: $token, nodes: $nodes}')"
+
+    RESP="$(curl -sS -X POST "$BATCH_API" \
+      -H "Content-Type: application/json" \
+      -d "$PAYLOAD" \
+      -w '\n%{http_code}')"
+
+    BODY="${RESP%$'\n'*}"
+    HTTP_CODE="${RESP##*$'\n'}"
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      batch_created="$(echo "$BODY" | jq '.created')"
+      batch_updated="$(echo "$BODY" | jq '.updated')"
+      batch_skipped="$(echo "$BODY" | jq '.skipped')"
+      batch_errors="$(echo "$BODY" | jq '.errors')"
+      OK=$((batch_created + batch_updated))
+      FAIL=$((batch_skipped + batch_errors))
+      echo "  ✓ $batch_created created, $batch_updated updated, $batch_skipped skipped, $batch_errors errors"
+    else
+      MSG="$(echo "$BODY" | jq -r '.detail // .' 2>/dev/null || echo "$BODY")"
+      echo "  ✗ Batch failed (HTTP $HTTP_CODE): $MSG"
+      FAIL=$COUNT
+    fi
+  fi
+fi
+
 echo ""
-echo "Done. $OK registered, $FAIL failed (out of $COUNT)."
+echo "Done. $OK ok, $FAIL failed (out of $COUNT)."
