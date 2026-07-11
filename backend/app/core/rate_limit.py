@@ -81,6 +81,11 @@ def rate_limit_register(request: Request) -> None:
     _limiter.check(f"register:{_client_ip(request)}", max_hits=5, window_seconds=3600)
 
 
+def rate_limit_register_node(request: Request) -> None:
+    ip = _client_ip(request)
+    _limiter.check(f"regnode-ip:{ip}", max_hits=30, window_seconds=60)
+
+
 def rate_limit_login(request: Request, payload: LoginRequest) -> None:
     """
     Login rate limiting.
