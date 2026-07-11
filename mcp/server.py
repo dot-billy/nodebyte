@@ -12,11 +12,20 @@ Env:
   NODEBYTE_PASSWORD   service-account password (required)
   NODEBYTE_TEAM_ID    optional default team id; if unset, the account's first
                       team is used
-  MCP_TOKEN           inbound bearer gate for Claude -> this server (optional)
+  MCP_TOKEN           inbound bearer gate for Claude -> this server (required;
+                      the server refuses to start without it)
+  MCP_HOST            listen address (default 127.0.0.1)
   PORT                listen port (default 8080)
+  MCP_ALLOWED_HOSTS   comma-separated Host header allowlist for DNS-rebinding
+                      protection (default "127.0.0.1:*,localhost:*"; set this
+                      when serving on a non-localhost hostname)
+  MCP_ALLOWED_ORIGINS comma-separated Origin header allowlist (default empty:
+                      requests without an Origin header pass, cross-origin
+                      browser requests are rejected)
 """
 
 import os
+import secrets
 from typing import Any
 
 import httpx
@@ -33,11 +42,25 @@ NODEBYTE_BASE_URL = os.environ.get(
 NODEBYTE_EMAIL = os.environ["NODEBYTE_EMAIL"]
 NODEBYTE_PASSWORD = os.environ["NODEBYTE_PASSWORD"]
 NODEBYTE_TEAM_ID = os.environ.get("NODEBYTE_TEAM_ID") or None
-MCP_TOKEN = os.environ.get("MCP_TOKEN")
+MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
+if not MCP_TOKEN:
+    raise SystemExit(
+        "MCP_TOKEN is not set (or empty). It is the inbound auth gate for this "
+        "server; refusing to start unauthenticated. Set MCP_TOKEN to a strong secret."
+    )
+MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8080"))
+MCP_ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("MCP_ALLOWED_HOSTS", "127.0.0.1:*,localhost:*").split(",")
+    if h.strip()
+]
+MCP_ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get("MCP_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 
 INSTRUCTIONS = """\
-Tools for a Nodebyte digital-inventory instance (https://nodebyte.internal.white.fm).
+Tools for a Nodebyte digital-inventory instance (the deployment at NODEBYTE_BASE_URL).
 Nodebyte tracks the devices, sites, and services an IT team depends on. Each entry is
 a "node" with a name, a kind, and optional hostname / ip / url / tags / notes.
 
@@ -59,11 +82,15 @@ Teams: nodes live in a team. Every tool takes an optional team_id; when omitted 
 service account's first (or configured default) team is used. list_teams shows them.
 """
 
-_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=MCP_ALLOWED_HOSTS,
+    allowed_origins=MCP_ALLOWED_ORIGINS,
+)
 mcp = FastMCP(
     "nodebyte",
     instructions=INSTRUCTIONS,
-    host="0.0.0.0",
+    host=MCP_HOST,
     port=PORT,
     transport_security=_security,
 )
@@ -322,8 +349,10 @@ async def node_stats(team_id: str | None = None) -> dict:
 
 class TokenAuth(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if MCP_TOKEN and request.url.path != "/healthz":
-            if request.headers.get("authorization", "") != f"Bearer {MCP_TOKEN}":
+        if request.url.path != "/healthz":
+            expected = f"Bearer {MCP_TOKEN}".encode()
+            provided = request.headers.get("authorization", "").encode()
+            if not secrets.compare_digest(provided, expected):
                 return JSONResponse({"error": "unauthorized"}, status_code=401)
         return await call_next(request)
 
@@ -332,7 +361,7 @@ def main() -> None:
     app = mcp.streamable_http_app()
     app.add_middleware(TokenAuth)
     app.add_route("/healthz", lambda _req: PlainTextResponse("ok"), methods=["GET"])
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host=MCP_HOST, port=PORT)
 
 
 if __name__ == "__main__":
