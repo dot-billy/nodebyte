@@ -134,6 +134,8 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.prod
           push: false
+          load: true
+          tags: nodebyte-backend:ci
           cache-from: type=gha,scope=backend-prod
           cache-to: type=gha,mode=max,scope=backend-prod
 
@@ -143,6 +145,8 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile.prod
           push: false
+          load: true
+          tags: nodebyte-frontend:ci
           cache-from: type=gha,scope=frontend-prod
           cache-to: type=gha,mode=max,scope=frontend-prod
 
@@ -151,5 +155,16 @@ jobs:
         with:
           context: ./mcp
           push: false
+          load: true
+          tags: nodebyte-mcp:ci
           cache-from: type=gha,scope=mcp
           cache-to: type=gha,mode=max,scope=mcp
+
+      - name: Verify production image permissions
+        run: |
+          test "$(docker run --rm --entrypoint id nodebyte-backend:ci -u)" != "0"
+          test "$(docker run --rm --entrypoint id nodebyte-frontend:ci -u)" != "0"
+          docker run --rm --entrypoint sh nodebyte-frontend:ci -c \
+            'test -w /app/.next/server/app && touch /app/.next/server/app/.write-test && rm /app/.next/server/app/.write-test'
+          test "$(docker run --rm --entrypoint id nodebyte-mcp:ci -u)" != "0"
+          docker run --rm --entrypoint sh nodebyte-mcp:ci -c 'test -r /app/server.py'
