@@ -4,7 +4,7 @@ uvicorn[standard]>=0.34.0,<1.0
 SQLAlchemy[asyncio]>=2.0.48,<2.1
 asyncpg>=0.31.0,<1.0
 redis>=5.2.0,<7.0
-alembic>=1.14.1,<2.0
+alembic>=1.19.1,<2.0
 
 pydantic>=2.10.6,<3.0
 pydantic-settings>=2.15.0,<3.0
