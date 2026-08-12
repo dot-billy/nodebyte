@@ -11,7 +11,14 @@ from app.core.rbac import require_role
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.invites import InviteCreate, InviteCreated, InviteInfo, InvitePublic
-from app.services.invites import accept_invite, create_invite, get_invite_by_token, list_invites, revoke_invite
+from app.services.audit import record_audit_event
+from app.services.invites import (
+    accept_invite,
+    create_invite,
+    get_invite_by_token,
+    list_invites,
+    revoke_invite,
+)
 
 router = APIRouter(tags=["invites"])
 
@@ -45,6 +52,13 @@ async def create_team_invite(
         role=payload.role,
         invited_by_id=user.id,
     )
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="invite.created", resource_type="invite",
+        resource_id=invite.id, resource_name=invite.invited_email,
+        after_data={"email": invite.invited_email, "role": invite.role,
+                    "expires_at": str(invite.expires_at)},
+    )
     await db.commit()
     await db.refresh(invite, ["invited_by"])
     return _invite_to_public(invite, token)
@@ -74,6 +88,7 @@ async def revoke_team_invite(
 ) -> Response:
     await require_role(db, user=user, team_id=team_id, min_role="admin")
     from sqlalchemy import select
+
     from app.models.invite import Invite
 
     res = await db.execute(
@@ -83,6 +98,11 @@ async def revoke_team_invite(
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
     await revoke_invite(db, invite=invite)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="invite.revoked", resource_type="invite",
+        resource_id=invite.id, resource_name=invite.invited_email,
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -128,5 +148,11 @@ async def accept_team_invite(
         raise HTTPException(status_code=400, detail="Invite has expired")
 
     membership = await accept_invite(db, invite=invite, user_id=user.id)
+    await record_audit_event(
+        db, team_id=invite.team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="invite.accepted", resource_type="membership",
+        resource_id=membership.id, resource_name=user.email,
+        after_data={"role": membership.role, "invite_id": str(invite.id)},
+    )
     await db.commit()
     return {"message": "Invite accepted", "team_id": str(invite.team_id), "role": membership.role}

@@ -16,6 +16,11 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     team_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("teams.id"), nullable=False, index=True)
 
+    inventory_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("inventory_sources.id", ondelete="SET NULL"), nullable=True
+    )
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     parent_node_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("nodes.id", ondelete="SET NULL"),
@@ -63,6 +68,7 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     reviewed_by: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by_id])
     owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
+    inventory_source: Mapped["InventorySource | None"] = relationship()
 
     @property
     def owner_email(self) -> str | None:
@@ -73,5 +79,6 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         return self.reviewed_by.email if self.reviewed_by else None
 
 
+from app.models.inventory_source import InventorySource  # noqa: E402
 from app.models.team import Team  # noqa: E402
 from app.models.user import User  # noqa: E402

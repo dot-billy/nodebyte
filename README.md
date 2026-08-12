@@ -19,6 +19,9 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Bookmark sync** — nodes with URLs automatically sync to browser bookmarks, organized by kind
 - **Bulk operations** — multi-select nodes to delete or tag in batch
 - **Stale inventory review** — triage inactive nodes in bulk, assign an owner, and keep, ignore, or retire them
+- **Import reconciliation** — preview authoritative Docker, Kubernetes, and LXD changes before applying, with explicit missing-node retirement
+- **Automation health** — see source freshness, failures, summaries, and sync-run history
+- **Audit history** — inspect append-only human and automation changes with before/after context
 - **Invite system** — invite team members by email with role-based access
 - **Super admin console** — platform-wide user and team management for superusers
 
@@ -188,6 +191,27 @@ This creates `frontend/public/downloads/extension.tar.gz` and an `extension-meta
 4. Click the Nodebyte icon in your toolbar, open **Settings**, and set your API URL
 
 The extension connects directly to the backend API (e.g. `http://localhost:8000`).
+
+## Authoritative inventory sync
+
+The Docker, Kubernetes, and LXD collectors now create a server-side preview before
+they apply changes. Each source owns only the records it has previously synchronized,
+so one source cannot retire another source's inventory.
+
+```bash
+# Preview only; no node mutation
+NODEBYTE_SYNC_MODE=preview ./scripts/docker-inventory.sh
+
+# Preview and apply creates/updates; missing nodes stay unchanged
+NODEBYTE_SYNC_MODE=apply ./scripts/docker-inventory.sh
+
+# Explicitly retire records missing from this authoritative snapshot
+NODEBYTE_SYNC_MODE=apply NODEBYTE_RETIRE_MISSING=1 ./scripts/docker-inventory.sh
+```
+
+Pending previews can also be reviewed under **Dashboard → Automation** and applied
+by a team owner or admin. The same page shows source health and recent run summaries.
+Every applied mutation is recorded under **Dashboard → Activity**.
 
 ## Personal API Tokens and MCP
 

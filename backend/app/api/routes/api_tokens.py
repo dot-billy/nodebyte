@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.api_tokens import ApiTokenCreate, ApiTokenCreated, ApiTokenPublic
 from app.services.api_tokens import create_api_token, list_api_tokens, revoke_api_token
+from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/auth/api-tokens", tags=["auth"])
 
@@ -34,6 +35,13 @@ async def create_token(
         name=payload.name,
         expires_in_days=payload.expires_in_days,
     )
+    await record_audit_event(
+        db, team_id=None, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="api_token.created", resource_type="api_token",
+        resource_id=api_token.id, resource_name=api_token.name,
+        after_data={"name": api_token.name, "token_prefix": api_token.token_prefix,
+                    "expires_at": str(api_token.expires_at) if api_token.expires_at else None},
+    )
     await db.commit()
     await db.refresh(api_token)
     public = ApiTokenPublic.model_validate(api_token)
@@ -49,4 +57,11 @@ async def revoke_token(
     api_token = await revoke_api_token(db, user_id=user.id, token_id=token_id)
     if api_token is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API token not found")
+    await record_audit_event(
+        db, team_id=None, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="api_token.revoked", resource_type="api_token",
+        resource_id=api_token.id, resource_name=api_token.name,
+        before_data={"revoked_at": None},
+        after_data={"revoked_at": str(api_token.revoked_at)},
+    )
     await db.commit()

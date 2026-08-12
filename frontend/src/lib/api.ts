@@ -124,6 +124,7 @@ export interface RegistrationTokenPublic {
   use_count: number;
   allowed_kinds: string[] | null;
   expires_at: string | null;
+  last_used_at: string | null;
   is_active: boolean;
   is_usable: boolean;
   created_at: string;
@@ -137,6 +138,8 @@ export interface NodePublic {
   id: string;
   team_id: string;
   parent_node_id: string | null;
+  inventory_source_id: string | null;
+  external_id: string | null;
   kind: string;
   name: string;
   hostname: string | null;
@@ -189,6 +192,71 @@ export interface StaleReviewSummary {
 export interface StaleReviewQueue {
   summary: StaleReviewSummary;
   nodes: NodePublic[];
+}
+
+export interface AuditEventPublic {
+  id: string;
+  team_id: string | null;
+  actor_user_id: string | null;
+  actor_type: "user" | "automation" | "system";
+  actor_label: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  resource_name: string | null;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  context: Record<string, unknown>;
+  inventory_source_id: string | null;
+  sync_run_id: string | null;
+  created_at: string;
+}
+
+export interface AuditEventPage {
+  total: number;
+  events: AuditEventPublic[];
+}
+
+export interface InventorySourcePublic {
+  id: string;
+  team_id: string;
+  source_key: string;
+  name: string;
+  source_type: string;
+  expected_interval_minutes: number;
+  health_status: "healthy" | "stale" | "failing" | "never";
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_error: string | null;
+  last_summary: Record<string, number | boolean>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventorySyncRunPublic {
+  id: string;
+  source_id: string;
+  status: string;
+  reconcile_missing: boolean;
+  summary: Record<string, number | boolean>;
+  expires_at: string;
+  applied_at: string | null;
+  created_at: string;
+}
+
+export interface InventorySyncChange {
+  action: "create" | "update" | "unchanged" | "missing";
+  node_id: string | null;
+  external_id: string | null;
+  name: string;
+  hostname: string | null;
+  changed_fields: string[];
+}
+
+export interface InventorySyncRunDetail extends InventorySyncRunPublic {
+  source: InventorySourcePublic;
+  changes: InventorySyncChange[];
 }
 
 export interface PublicSettings {
@@ -427,6 +495,33 @@ export const api = {
       a.click();
       a.remove();
       URL.revokeObjectURL(a.href);
+    },
+  },
+  accountability: {
+    auditEvents(teamId: string, params?: { actor_type?: string; resource_type?: string; action?: string; limit?: number; offset?: number }) {
+      const qs = new URLSearchParams();
+      if (params?.actor_type) qs.set("actor_type", params.actor_type);
+      if (params?.resource_type) qs.set("resource_type", params.resource_type);
+      if (params?.action) qs.set("action", params.action);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.offset) qs.set("offset", String(params.offset));
+      const query = qs.toString();
+      return request<AuditEventPage>(`/api/teams/${teamId}/audit-events${query ? `?${query}` : ""}`);
+    },
+    sources(teamId: string) {
+      return request<{ sources: InventorySourcePublic[] }>(`/api/teams/${teamId}/inventory-sources`);
+    },
+    sourceRuns(teamId: string, sourceId: string, limit = 25) {
+      return request<InventorySyncRunPublic[]>(`/api/teams/${teamId}/inventory-sources/${sourceId}/runs?limit=${limit}`);
+    },
+    syncRun(teamId: string, runId: string) {
+      return request<InventorySyncRunDetail>(`/api/teams/${teamId}/inventory-sync-runs/${runId}`);
+    },
+    applySyncRun(teamId: string, runId: string, retireMissing: boolean) {
+      return request<{ run_id: string; status: string; summary: Record<string, number> }>(`/api/teams/${teamId}/inventory-sync-runs/${runId}/apply`, {
+        method: "POST",
+        body: JSON.stringify({ retire_missing: retireMissing }),
+      });
     },
   },
   admin: {

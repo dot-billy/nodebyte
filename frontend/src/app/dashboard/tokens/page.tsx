@@ -217,6 +217,7 @@ export default function RegistrationTokensPage() {
                 <th className="hidden px-4 py-3 text-left font-medium sm:table-cell">Usage</th>
                 <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Kinds</th>
                 <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Expires</th>
+                <th className="hidden px-4 py-3 text-left font-medium lg:table-cell">Last used</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -251,6 +252,9 @@ export default function RegistrationTokensPage() {
                   </td>
                   <td className="hidden px-4 py-3 text-[hsl(var(--muted-foreground))] md:table-cell">
                     {rt.expires_at ? new Date(rt.expires_at).toLocaleDateString() : "Never"}
+                  </td>
+                  <td className="hidden px-4 py-3 text-[hsl(var(--muted-foreground))] lg:table-cell">
+                    {rt.last_used_at ? new Date(rt.last_used_at).toLocaleString() : "Never"}
                   </td>
                   <td className="px-4 py-3">
                     {rt.is_usable ? (

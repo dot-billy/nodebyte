@@ -26,10 +26,12 @@ set -euo pipefail
 
 BASE_URL="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}"
 API="${BASE_URL}/api/register-node"
-BATCH_API="${BASE_URL}/api/register-nodes"
 TOKEN="${NODEBYTE_TOKEN:?Set NODEBYTE_TOKEN before running this script}"
 EXTRA_TAGS="${NODEBYTE_TAGS:-}"
 NODEBYTE_BATCH="${NODEBYTE_BATCH:-1}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=inventory-sync-lib.sh
+source "${SCRIPT_DIR}/inventory-sync-lib.sh"
 K8S_SKIP_SYSTEM="${K8S_SKIP_SYSTEM:-0}"
 K8S_NAMESPACES="${K8S_NAMESPACES:-}"
 K8S_RESOURCES="${K8S_RESOURCES:-nodes,namespaces,deployments,statefulsets,daemonsets,services,ingresses}"
@@ -159,30 +161,11 @@ flush_batch() {
   echo ""
   echo "Sending batch of $count nodes..."
 
-  PAYLOAD="$(jq -n --arg token "$TOKEN" --argjson nodes "$BATCH_ITEMS" \
-    '{token: $token, nodes: $nodes}')"
-
-  RESP="$(curl -sS -X POST "$BATCH_API" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD" \
-    -w '\n%{http_code}')"
-
-  BODY="${RESP%$'\n'*}"
-  HTTP_CODE="${RESP##*$'\n'}"
-
-  if [[ "$HTTP_CODE" == "200" ]]; then
-    local created updated skipped errors
-    created="$(echo "$BODY" | jq '.created')"
-    updated="$(echo "$BODY" | jq '.updated')"
-    skipped="$(echo "$BODY" | jq '.skipped')"
-    errors="$(echo "$BODY" | jq '.errors')"
-    OK=$((created + updated))
-    FAIL=$((skipped + errors))
-    echo "  ✓ $created created, $updated updated, $skipped skipped, $errors errors"
+  echo "Previewing authoritative Kubernetes inventory..."
+  if nodebyte_sync_batch "$BATCH_ITEMS" "kubernetes:${CLUSTER_NAME}" "Kubernetes ${CLUSTER_NAME}" "kubernetes" >/dev/null; then
+    OK=$count
   else
-    MSG="$(json_error_summary "$BODY")"
-    echo "  ✗ Batch failed (HTTP $HTTP_CODE): $MSG"
-    FAIL=$TOTAL
+    FAIL=$count
   fi
 
   BATCH_ITEMS='[]'

@@ -29,9 +29,10 @@ from app.schemas.admin import (
     AdminUserRow,
     AdminUserUpdate,
 )
-from app.services.users import get_user_by_email
 from app.services.api_tokens import revoke_all_api_tokens
+from app.services.audit import record_audit_event
 from app.services.refresh_sessions import revoke_all_refresh_sessions
+from app.services.users import get_user_by_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -120,7 +121,7 @@ async def admin_list_users(
 @router.post("/users", response_model=AdminUserRow, status_code=status.HTTP_201_CREATED)
 async def admin_create_user(
     payload: AdminCreateUser,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> AdminUserRow:
     existing = await get_user_by_email(db, payload.email)
@@ -135,6 +136,12 @@ async def admin_create_user(
     )
     db.add(user)
     await db.flush()
+    await record_audit_event(
+        db, team_id=None, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.user_created", resource_type="user", resource_id=user.id,
+        resource_name=user.email, after_data={"email": user.email,
+        "is_superuser": user.is_superuser, "is_active": user.is_active},
+    )
     await db.commit()
 
     user = await _load_user(db, user.id)
@@ -159,6 +166,8 @@ async def admin_update_user(
     db: AsyncSession = Depends(get_db),
 ) -> AdminUserRow:
     target = await _load_user(db, user_id)
+    before = {"email": target.email, "full_name": target.full_name,
+              "is_active": target.is_active, "is_superuser": target.is_superuser}
 
     if target.id == su.id:
         if payload.is_active is False:
@@ -184,6 +193,15 @@ async def admin_update_user(
         await revoke_all_api_tokens(db, user_id=target.id)
         await revoke_all_refresh_sessions(db, user_id=target.id)
 
+    await record_audit_event(
+        db, team_id=None, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.user_updated", resource_type="user", resource_id=target.id,
+        resource_name=target.email, before_data=before,
+        after_data={"email": target.email, "full_name": target.full_name,
+                    "is_active": target.is_active, "is_superuser": target.is_superuser,
+                    "password_changed": payload.new_password is not None},
+    )
+
     await db.commit()
     target = await _load_user(db, user_id)
     return await _user_to_row(target)
@@ -201,7 +219,13 @@ async def admin_delete_user(
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    target_email = target.email
     await db.delete(target)
+    await record_audit_event(
+        db, team_id=None, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.user_deleted", resource_type="user", resource_id=user_id,
+        resource_name=target_email, before_data={"email": target_email},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -247,7 +271,7 @@ async def admin_list_teams(
 @router.post("/teams", response_model=AdminTeamRow, status_code=status.HTTP_201_CREATED)
 async def admin_create_team(
     payload: AdminCreateTeam,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> AdminTeamRow:
     owner = (await db.execute(select(User).where(User.id == payload.owner_user_id))).scalar_one_or_none()
@@ -265,6 +289,13 @@ async def admin_create_team(
 
     membership = Membership(user_id=owner.id, team_id=team.id, role="owner")
     db.add(membership)
+    await db.flush()
+    await record_audit_event(
+        db, team_id=team.id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.team_created", resource_type="team", resource_id=team.id,
+        resource_name=team.name, after_data={"name": team.name, "slug": team.slug,
+                                             "owner_user_id": str(owner.id)},
+    )
     await db.commit()
 
     return await _team_row(db, team)
@@ -303,12 +334,13 @@ async def admin_get_team(
 async def admin_update_team(
     team_id: uuid.UUID,
     payload: AdminTeamUpdate,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> AdminTeamRow:
     team = (await db.execute(select(Team).where(Team.id == team_id))).scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    before = {"name": team.name, "slug": team.slug}
 
     if payload.name is not None:
         team.name = payload.name
@@ -318,6 +350,13 @@ async def admin_update_team(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slug already in use")
         team.slug = payload.slug
 
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.team_updated", resource_type="team", resource_id=team.id,
+        resource_name=team.name, before_data=before,
+        after_data={"name": team.name, "slug": team.slug},
+    )
+
     await db.commit()
     await db.refresh(team)
     return await _team_row(db, team)
@@ -326,14 +365,20 @@ async def admin_update_team(
 @router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def admin_delete_team(
     team_id: uuid.UUID,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     result = await db.execute(select(Team).where(Team.id == team_id))
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    target_name = target.name
     await db.delete(target)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.team_deleted", resource_type="team", resource_id=team_id,
+        resource_name=target_name, before_data={"name": target_name, "slug": target.slug},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -346,7 +391,7 @@ async def admin_delete_team(
 async def admin_add_member(
     team_id: uuid.UUID,
     payload: AdminAddMember,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> AdminMemberRow:
     team = (await db.execute(select(Team).where(Team.id == team_id))).scalar_one_or_none()
@@ -365,6 +410,13 @@ async def admin_add_member(
 
     membership = Membership(user_id=user.id, team_id=team_id, role=payload.role)
     db.add(membership)
+    await db.flush()
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.membership_added", resource_type="membership",
+        resource_id=membership.id, resource_name=user.email,
+        after_data={"user_id": str(user.id), "role": membership.role},
+    )
     await db.commit()
     await db.refresh(membership)
 
@@ -379,7 +431,7 @@ async def admin_update_member(
     team_id: uuid.UUID,
     membership_id: uuid.UUID,
     payload: AdminUpdateMemberRole,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> AdminMemberRow:
     result = await db.execute(
@@ -391,7 +443,14 @@ async def admin_update_member(
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
 
+    old_role = membership.role
     membership.role = payload.role
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.membership_role_changed", resource_type="membership",
+        resource_id=membership.id, resource_name=membership.user.email,
+        before_data={"role": old_role}, after_data={"role": payload.role},
+    )
     await db.commit()
     await db.refresh(membership)
 
@@ -405,15 +464,24 @@ async def admin_update_member(
 async def admin_remove_member(
     team_id: uuid.UUID,
     membership_id: uuid.UUID,
-    _su: User = Depends(require_superuser),
+    su: User = Depends(require_superuser),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     result = await db.execute(
-        select(Membership).where(Membership.id == membership_id, Membership.team_id == team_id)
+        select(Membership).options(selectinload(Membership.user))
+        .where(Membership.id == membership_id, Membership.team_id == team_id)
     )
     membership = result.scalar_one_or_none()
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+    member_email = membership.user.email
+    member_role = membership.role
     await db.delete(membership)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=su.id, actor_label=su.email,
+        action="admin.membership_removed", resource_type="membership",
+        resource_id=membership.id, resource_name=member_email,
+        before_data={"user_id": str(membership.user_id), "role": member_role},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

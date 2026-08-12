@@ -25,6 +25,7 @@ from app.schemas.auth import (
 )
 from app.schemas.users import UserPublic, UserUpdate
 from app.services.api_tokens import revoke_all_api_tokens
+from app.services.audit import record_audit_event
 from app.services.invites import accept_invite, get_invite_by_token
 from app.services.refresh_sessions import (
     RefreshSessionError,
@@ -118,7 +119,13 @@ async def register(
     user = await create_user(db, email=email, password=payload.password, full_name=payload.full_name)
 
     if invite:
-        await accept_invite(db, invite=invite, user_id=user.id)
+        membership = await accept_invite(db, invite=invite, user_id=user.id)
+        await record_audit_event(
+            db, team_id=invite.team_id, actor_type="user", actor_user_id=user.id,
+            actor_label=user.email, action="invite.accepted", resource_type="membership",
+            resource_id=membership.id, resource_name=user.email,
+            after_data={"role": membership.role, "invite_id": str(invite.id)},
+        )
     else:
         if not payload.team_name or len(payload.team_name.strip()) < 2:
             raise HTTPException(status_code=400, detail="Team name is required")
@@ -131,7 +138,15 @@ async def register(
             slug = f"{base_slug}-{i+1}"
         else:
             raise HTTPException(status_code=500, detail="Could not allocate team slug")
-        await create_team_with_owner(db, name=payload.team_name.strip(), slug=slug, owner_user_id=user.id)
+        team = await create_team_with_owner(
+            db, name=payload.team_name.strip(), slug=slug, owner_user_id=user.id
+        )
+        await record_audit_event(
+            db, team_id=team.id, actor_type="user", actor_user_id=user.id,
+            actor_label=user.email, action="team.created", resource_type="team",
+            resource_id=team.id, resource_name=team.name,
+            after_data={"name": team.name, "slug": team.slug},
+        )
 
     access = create_access_token(user_id=user.id)
     ip, user_agent = _request_metadata(request)

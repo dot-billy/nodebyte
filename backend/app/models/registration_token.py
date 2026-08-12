@@ -31,6 +31,7 @@ class RegistrationToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     allowed_kinds: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
 
     team: Mapped["Team"] = relationship()

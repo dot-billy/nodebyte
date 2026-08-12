@@ -16,6 +16,7 @@ class NodeCreate(BaseModel):
     tags: list[str] = Field(default_factory=list)
     meta: dict = Field(default_factory=dict)
     notes: str | None = None
+    external_id: str | None = Field(default=None, max_length=255)
 
 
 class NodeUpdate(BaseModel):
@@ -30,12 +31,15 @@ class NodeUpdate(BaseModel):
     notes: str | None = None
     last_seen_at: datetime | None = None
     last_seen_source: str | None = Field(default=None, max_length=100)
+    external_id: str | None = Field(default=None, max_length=255)
 
 
 class NodePublic(BaseModel):
     id: uuid.UUID
     team_id: uuid.UUID
     parent_node_id: uuid.UUID | None
+    inventory_source_id: uuid.UUID | None
+    external_id: str | None
     kind: str
     name: str
     hostname: str | None

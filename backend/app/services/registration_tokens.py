@@ -7,9 +7,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.opaque_tokens import generate_opaque_token, hash_opaque_token
 from app.models.node import Node
 from app.models.registration_token import RegistrationToken
-from app.core.opaque_tokens import generate_opaque_token, hash_opaque_token
 
 REGISTRATION_TOKEN_PREFIX = "nb_reg_"  # nosec B105
 
@@ -164,6 +164,7 @@ async def register_or_update_node_with_token(
 
     existing = await _find_existing_node_for_registration(db, team_id=rt.team_id, data=data)
     now = datetime.now(timezone.utc)
+    rt.last_used_at = now
 
     if existing:
         # Update the existing node in-place.
