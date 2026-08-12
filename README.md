@@ -14,6 +14,7 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Multi-tenant teams** — create teams with roles (owner, admin, member, viewer) and switch context in one click
 - **REST API** — automate node registration from deploy scripts, monitoring, or CI/CD pipelines
 - **Registration tokens** — let servers and agents self-register as nodes without user credentials
+- **Personal API tokens** — authenticate scripts and integrations with revocable, expiring tokens instead of user passwords
 - **Browser extension** — add any website to your inventory with one click (Chrome, Manifest V3)
 - **Bookmark sync** — nodes with URLs automatically sync to browser bookmarks, organized by kind
 - **Bulk operations** — multi-select nodes to delete or tag in batch
@@ -184,6 +185,24 @@ This creates `frontend/public/downloads/extension.tar.gz` and an `extension-meta
 4. Click the Nodebyte icon in your toolbar, open **Settings**, and set your API URL
 
 The extension connects directly to the backend API (e.g. `http://localhost:8000`).
+
+## Personal API Tokens and MCP
+
+Create personal API tokens from **Dashboard → Settings** for scripts and integrations.
+The plaintext token is shown once, only a SHA-256 lookup hash is stored, and each
+token can be given an expiration date or revoked independently. Token requests use
+the same team membership and RBAC permissions as the user who created the token.
+
+Use the token as a bearer credential:
+
+```bash
+curl https://nodebyte.example.com/api/teams \
+  -H "Authorization: Bearer ${NODEBYTE_API_TOKEN}" # gitleaks:allow
+```
+
+The bundled MCP server in `mcp/` requires both a Nodebyte personal API token for
+backend access and a separate `MCP_TOKEN` protecting inbound MCP requests. See
+[`mcp/README.md`](mcp/README.md) for the hardened deployment options.
 
 ## Seed Data
 

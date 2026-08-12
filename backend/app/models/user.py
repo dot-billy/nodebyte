@@ -21,7 +21,8 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    api_tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
+from app.models.api_token import ApiToken  # noqa: E402
 from app.models.membership import Membership  # noqa: E402
-
