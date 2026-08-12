@@ -120,7 +120,7 @@ jobs:
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ci-dummy-turnstile-site-key
         run: docker compose -f docker-compose.prod.yml config --quiet
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build backend image
         uses: docker/build-push-action@v6
