@@ -5,6 +5,8 @@ import secrets
 
 
 def hash_opaque_token(token: str) -> str:
+    """Hash a generated 256-bit opaque token for equality lookup, not a password."""
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 

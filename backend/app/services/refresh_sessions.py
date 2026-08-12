@@ -20,6 +20,8 @@ class RefreshSessionError(Exception):
 
 
 def _token_hash(token: str) -> str:
+    # Refresh JWTs are signed, high-entropy opaque credentials, not passwords.
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 

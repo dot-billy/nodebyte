@@ -24,6 +24,8 @@ def _hash_existing_tokens(table: str) -> None:
     bind = op.get_bind()
     rows = bind.execute(sa.text(f"select id, token from {table}")).all()
     for row_id, token in rows:
+        # Existing values are generated high-entropy opaque tokens, not passwords.
+        # codeql[py/weak-sensitive-data-hashing]
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
         bind.execute(
             sa.text(
