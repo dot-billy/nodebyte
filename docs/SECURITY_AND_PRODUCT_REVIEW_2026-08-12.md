@@ -9,8 +9,10 @@ that prevent the same classes of regression.
 
 Production topology was verified through the Catalyst Backoffice as the active
 Docker Compose deployment on `nodebyte-prod` (`nodebyte.tech`), proxied through the
-DigitalOcean edge. The exact production Git revision was not available from the
-Backoffice record and must be captured during the production deployment proof.
+DigitalOcean edge. Direct inventory found a clean `master` checkout at `49838be`
+before rollout. It also found that the live stack still used development Dockerfiles,
+source bind mounts, and a published Postgres port; the tracked production Compose
+definition added by this review removes those deployment risks.
 
 ## Security findings and disposition
 
@@ -24,6 +26,7 @@ Backoffice record and must be captured during the production deployment proof.
 | High | Frontend CI was broken after Next.js 16 removed `next lint`; unrelated PRs stayed red. | Migrated CI lint to ESLint's native CLI and current flat config. |
 | High | Backend CI used `pytest ... || true`, so missing or failing tests could never fail CI. | Removed the bypass, added security regression tests, and made Python dependency audit part of CI. |
 | High | The frontend build image and CI ran on end-of-life Node 20. | Migrated both to Node 22 LTS. |
+| High | Production used development images, bind-mounted the checkout into app containers, and published Postgres on the VM. | Added a validated `docker-compose.prod.yml` using non-root immutable images, no source bind mounts, no database host port, dropped application capabilities, and explicit health checks. |
 | Medium | Batch registration returned raw exception strings, which could expose database/internal details. | Server logs retain the traceback; clients receive a generic error. |
 | Medium | Dependency update automation was absent. | Added weekly Dependabot coverage for npm, backend/mcp pip, and GitHub Actions. |
 
