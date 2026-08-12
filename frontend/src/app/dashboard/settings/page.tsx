@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Copy, KeyRound, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type ApiTokenCreated, type ApiTokenPublic } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +16,7 @@ export default function SettingsPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -26,8 +27,164 @@ export default function SettingsPage() {
       <ProfileForm user={user} onSaved={reloadProfile} />
       <EmailForm user={user} onSaved={reloadProfile} />
       <PasswordForm />
+      <ApiTokensCard />
       <DangerZone user={user} />
     </div>
+  );
+}
+
+function ApiTokensCard() {
+  const [tokens, setTokens] = useState<ApiTokenPublic[]>([]);
+  const [name, setName] = useState("");
+  const [expiresInDays, setExpiresInDays] = useState("90");
+  const [created, setCreated] = useState<ApiTokenCreated | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadTokens = useCallback(async () => {
+    try {
+      setTokens(await api.auth.listApiTokens());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load API tokens");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTokens();
+  }, [loadTokens]);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setCreated(null);
+    try {
+      const token = await api.auth.createApiToken({
+        name,
+        expires_in_days: expiresInDays ? Number(expiresInDays) : null,
+      });
+      setCreated(token);
+      setName("");
+      await loadTokens();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create API token");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRevoke(tokenId: string) {
+    setError("");
+    try {
+      await api.auth.revokeApiToken(tokenId);
+      await loadTokens();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to revoke API token");
+    }
+  }
+
+  async function copyCreatedToken() {
+    if (!created) return;
+    await navigator.clipboard.writeText(created.token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <KeyRound className="h-5 w-5" />
+          Personal API tokens
+        </CardTitle>
+        <CardDescription>
+          Use revocable tokens for scripts, integrations, and the Nodebyte MCP server without storing your password.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {error && <StatusBanner type="error" message={error} />}
+        {created && (
+          <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+            <p className="text-sm font-medium">Copy this token now. It will not be shown again.</p>
+            <div className="flex gap-2">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded bg-white px-3 py-2 text-xs dark:bg-black/30">
+                {created.token}
+              </code>
+              <Button type="button" size="sm" variant="outline" onClick={copyCreatedToken} className="gap-1.5">
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-[1fr_150px_auto] sm:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="token-name">Token name</Label>
+            <Input
+              id="token-name"
+              required
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Automation or MCP"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="token-expiry">Expires in days</Label>
+            <Input
+              id="token-expiry"
+              type="number"
+              min={1}
+              max={3650}
+              value={expiresInDays}
+              onChange={(e) => setExpiresInDays(e.target.value)}
+              placeholder="Never"
+            />
+          </div>
+          <Button type="submit" disabled={busy}>
+            {busy && <Spinner className="mr-2" />}
+            Create token
+          </Button>
+        </form>
+
+        <div className="space-y-2">
+          {tokens.length === 0 ? (
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">No API tokens yet.</p>
+          ) : (
+            tokens.map((token) => (
+              <div key={token.id} className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{token.name}</span>
+                    <code className="text-xs text-[hsl(var(--muted-foreground))]">{token.token_prefix}…</code>
+                    {!token.is_active && <span className="text-xs font-medium text-red-600">Inactive</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                    Created {new Date(token.created_at).toLocaleDateString()}
+                    {token.expires_at ? ` · Expires ${new Date(token.expires_at).toLocaleDateString()}` : " · Never expires"}
+                    {token.last_used_at ? ` · Last used ${new Date(token.last_used_at).toLocaleString()}` : " · Never used"}
+                  </p>
+                </div>
+                {token.is_active && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleRevoke(token.id)}
+                    className="shrink-0 gap-1.5 text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Revoke
+                  </Button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -196,7 +353,9 @@ function PasswordForm() {
       <form onSubmit={handleSubmit}>
         <CardHeader>
           <CardTitle className="text-lg">Password</CardTitle>
-          <CardDescription>Update your password. Must be at least 8 characters.</CardDescription>
+          <CardDescription>
+            Update your password. Must be at least 8 characters. This also revokes all personal API tokens.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <StatusBanner type="error" message={error} />}

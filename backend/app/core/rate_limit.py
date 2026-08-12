@@ -94,3 +94,13 @@ def rate_limit_login(request: Request, payload: LoginRequest) -> None:
 
     _limiter.check(f"login-ip:{ip}", max_hits=60, window_seconds=60)
     _limiter.check(f"login:{ip}:{email}", max_hits=10, window_seconds=60)
+
+
+def rate_limit_register_node(request: Request) -> None:
+    """Protect single-node registration from runaway agents and token probing."""
+    _limiter.check(f"register-node:{_client_ip(request)}", max_hits=30, window_seconds=60)
+
+
+def rate_limit_register_nodes_batch(request: Request) -> None:
+    """Batch requests are more expensive, so give them a separate smaller budget."""
+    _limiter.check(f"register-nodes:{_client_ip(request)}", max_hits=6, window_seconds=60)

@@ -2,14 +2,12 @@
 
 A FastMCP streamable-HTTP server that lets Claude add, upload, and search nodes
 in a Nodebyte digital-inventory instance. It authenticates to the Nodebyte REST
-API with a service account (email + password), caches the access token, and
-re-logs-in transparently when the token expires.
+API with a revocable personal API token, so no user password is stored here.
 
 Env:
   NODEBYTE_BASE_URL   base URL of the Nodebyte backend, e.g.
                       http://backend.nodebyte.svc.cluster.local:8000 (default)
-  NODEBYTE_EMAIL      service-account email (required)
-  NODEBYTE_PASSWORD   service-account password (required)
+  NODEBYTE_API_TOKEN  personal API token created in Nodebyte Settings (required)
   NODEBYTE_TEAM_ID    optional default team id; if unset, the account's first
                       team is used
   MCP_TOKEN           inbound bearer gate for Claude -> this server (required;
@@ -39,8 +37,12 @@ from starlette.responses import JSONResponse, PlainTextResponse
 NODEBYTE_BASE_URL = os.environ.get(
     "NODEBYTE_BASE_URL", "http://backend.nodebyte.svc.cluster.local:8000"
 ).rstrip("/")
-NODEBYTE_EMAIL = os.environ["NODEBYTE_EMAIL"]
-NODEBYTE_PASSWORD = os.environ["NODEBYTE_PASSWORD"]
+NODEBYTE_API_TOKEN = os.environ.get("NODEBYTE_API_TOKEN", "")
+if not NODEBYTE_API_TOKEN:
+    raise SystemExit(
+        "NODEBYTE_API_TOKEN is not set (or empty). Create a personal API token in "
+        "Nodebyte Settings and provide it to the MCP server."
+    )
 NODEBYTE_TEAM_ID = os.environ.get("NODEBYTE_TEAM_ID") or None
 MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
 if not MCP_TOKEN:
@@ -95,49 +97,25 @@ mcp = FastMCP(
     transport_security=_security,
 )
 
-# Nodebyte skips Cloudflare Turnstile on login when the User-Agent starts with
-# "NodebyteApp/", so this client authenticates even if Turnstile is enabled.
 _client = httpx.AsyncClient(
     base_url=NODEBYTE_BASE_URL,
-    headers={"User-Agent": "NodebyteApp/1.0"},
+    headers={"Authorization": f"Bearer {NODEBYTE_API_TOKEN}"},
     timeout=30.0,
 )
 
-_access_token: str | None = None
 _default_team_id: str | None = NODEBYTE_TEAM_ID
 
 
-async def _login() -> str:
-    global _access_token
-    resp = await _client.post(
-        "/api/auth/login",
-        json={"email": NODEBYTE_EMAIL, "password": NODEBYTE_PASSWORD},
-    )
-    if resp.status_code >= 400:
-        raise RuntimeError(f"nodebyte login failed -> {resp.status_code}: {resp.text[:300]}")
-    _access_token = resp.json()["access_token"]
-    return _access_token
-
-
 async def _req(method: str, path: str, *, params: dict | None = None, json: Any = None) -> Any:
-    """Call the Nodebyte API with the cached bearer, re-logging-in once on 401."""
-    global _access_token
-    if _access_token is None:
-        await _login()
-    for attempt in (1, 2):
-        headers = {"Authorization": f"Bearer {_access_token}"}
-        resp = await _client.request(method, path, params=params, json=json, headers=headers)
-        if resp.status_code == 401 and attempt == 1:
-            await _login()
-            continue
-        if resp.status_code >= 400:
-            raise RuntimeError(f"nodebyte {method} {path} -> {resp.status_code}: {resp.text[:500]}")
-        if resp.status_code == 204:
-            return None
-        if resp.headers.get("content-type", "").startswith("application/json"):
-            return resp.json()
-        return resp.text
-    raise RuntimeError(f"nodebyte {method} {path} -> unauthorized after re-login")
+    """Call the Nodebyte API with the configured revocable personal token."""
+    resp = await _client.request(method, path, params=params, json=json)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"nodebyte {method} {path} -> {resp.status_code}: {resp.text[:500]}")
+    if resp.status_code == 204:
+        return None
+    if resp.headers.get("content-type", "").startswith("application/json"):
+        return resp.json()
+    return resp.text
 
 
 async def _resolve_team(team_id: str | None) -> str:

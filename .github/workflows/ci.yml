@@ -26,7 +26,10 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit -r requirements.txt
 
       - name: Import check
         env:
@@ -35,7 +38,10 @@ jobs:
         run: python -c "from app.main import app; print('Backend import OK')"
 
       - name: Run tests
-        run: python -m pytest tests/ -v --tb=short || true
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost/ci
+          JWT_SECRET: ci-dummy
+        run: python -m pytest tests/ -v --tb=short
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -54,6 +60,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
@@ -62,6 +71,39 @@ jobs:
 
       - name: Run tests
         run: npm test --if-present
+
+  mcp-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: mcp/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit -r requirements.txt
+
+      - name: Compile server
+        run: python -m py_compile server.py
+
+      - name: Verify fail-closed configuration
+        env:
+          NODEBYTE_API_TOKEN: nb_pat_ci_dummy
+        run: |
+          if python server.py 2>error.log; then
+            echo "MCP server unexpectedly started without MCP_TOKEN"
+            exit 1
+          fi
+          grep -q "MCP_TOKEN is not set" error.log
 
   docker-build:
     runs-on: ubuntu-latest
@@ -85,3 +127,29 @@ jobs:
           push: false
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Build production backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: false
+          cache-from: type=gha,scope=backend-prod
+          cache-to: type=gha,mode=max,scope=backend-prod
+
+      - name: Build production frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: false
+          cache-from: type=gha,scope=frontend-prod
+          cache-to: type=gha,mode=max,scope=frontend-prod
+
+      - name: Build MCP image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./mcp
+          push: false
+          cache-from: type=gha,scope=mcp
+          cache-to: type=gha,mode=max,scope=mcp

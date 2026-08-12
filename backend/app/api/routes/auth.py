@@ -10,15 +10,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.rate_limit import rate_limit_login, rate_limit_register
-from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    verify_password,
+)
 from app.core.slug import slugify
 from app.core.turnstile import verify_turnstile
 from app.db.session import get_db
 from app.models.team import Team
 from app.models.user import User
-from app.core.security import verify_password
-from app.schemas.auth import LoginRequest, MessageResponse, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    MessageResponse,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 from app.schemas.users import UserPublic, UserUpdate
+from app.services.api_tokens import revoke_all_api_tokens
 from app.services.invites import accept_invite, get_invite_by_token
 from app.services.teams import create_team_with_owner
 from app.services.users import authenticate, create_user, get_user_by_email, update_user
@@ -124,10 +135,8 @@ async def login(
 ) -> TokenResponse:
     _check_honeypot(payload.website)
     origin = request.headers.get("origin", "")
-    user_agent = request.headers.get("user-agent", "")
     is_extension = origin.startswith("chrome-extension://")
-    is_native_app = user_agent.startswith("NodebyteApp/")
-    if not (is_extension or is_native_app):
+    if not is_extension:
         await verify_turnstile(payload.cf_turnstile_token, request.client.host if request.client else None)
 
     user = await authenticate(db, email=payload.email, password=payload.password)
@@ -207,6 +216,7 @@ async def update_me(
         kwargs["new_password"] = fields["new_password"]
 
     updated = await update_user(db, user=user, **kwargs)
+    if "new_password" in fields:
+        await revoke_all_api_tokens(db, user_id=user.id)
     await db.commit()
     return updated
-

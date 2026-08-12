@@ -48,6 +48,21 @@ export interface TokenResponse {
   token_type: string;
 }
 
+export interface ApiTokenPublic {
+  id: string;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  is_active: boolean;
+}
+
+export interface ApiTokenCreated extends ApiTokenPublic {
+  token: string;
+}
+
 export interface UserPublic {
   id: string;
   email: string;
@@ -221,6 +236,18 @@ export const api = {
     },
     updateProfile(data: { full_name?: string; email?: string; current_password?: string; new_password?: string }) {
       return request<UserPublic>("/api/auth/me", { method: "PATCH", body: JSON.stringify(data) });
+    },
+    listApiTokens() {
+      return request<ApiTokenPublic[]>("/api/auth/api-tokens");
+    },
+    createApiToken(data: { name: string; expires_in_days: number | null }) {
+      return request<ApiTokenCreated>("/api/auth/api-tokens", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    revokeApiToken(tokenId: string) {
+      return request<void>(`/api/auth/api-tokens/${tokenId}`, { method: "DELETE" });
     },
   },
   teams: {
