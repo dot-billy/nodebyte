@@ -1,4 +1,4 @@
-fastapi>=0.135.0,<1.0
+fastapi>=0.141.1,<1.0
 uvicorn[standard]>=0.34.0,<1.0
 
 SQLAlchemy[asyncio]>=2.0.48,<2.1
