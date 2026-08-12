@@ -19,6 +19,8 @@ import {
   UsersRound,
   Building2,
   Archive,
+  ScrollText,
+  RadioTower,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
@@ -30,6 +32,8 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: typeof LayoutDash
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/nodes", label: "Nodes", icon: Server, exact: true },
   { href: "/dashboard/nodes/review", label: "Stale review", icon: Archive },
+  { href: "/dashboard/automation", label: "Automation", icon: RadioTower },
+  { href: "/dashboard/activity", label: "Activity", icon: ScrollText },
   { href: "/dashboard/team", label: "Team", icon: Users },
   { href: "/dashboard/tokens", label: "Tokens", icon: KeyRound },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

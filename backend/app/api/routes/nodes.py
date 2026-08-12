@@ -25,16 +25,17 @@ from app.schemas.nodes import (
     StaleReviewQueue,
 )
 from app.services.ansible_inventory import build_ansible_inventory
+from app.services.audit import node_snapshot, record_audit_event
 from app.services.nodes import (
+    apply_stale_review_decision,
     bulk_delete_nodes,
     bulk_update_tags,
-    apply_stale_review_decision,
     count_nodes,
     create_node,
     delete_node,
+    get_node,
     get_node_stats,
     get_stale_review_queue,
-    get_node,
     list_nodes,
     update_node,
     validate_parent_node_id,
@@ -109,6 +110,11 @@ async def nodes_create(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     node = await create_node(db, team_id=team_id, data=data)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.created", resource_type="node",
+        resource_id=node.id, resource_name=node.name, after_data=node_snapshot(node),
+    )
     await db.commit()
     created = await get_node(db, team_id=team_id, node_id=node.id)
     if created is None:  # pragma: no cover - defensive after a successful insert
@@ -124,7 +130,15 @@ async def nodes_bulk_delete(
     db: AsyncSession = Depends(get_db),
 ) -> BulkActionResponse:
     await require_role(db, user=user, team_id=team_id, min_role="member")
+    rows = await db.execute(select(Node).where(Node.team_id == team_id, Node.id.in_(payload.node_ids)))
+    snapshots = [node_snapshot(node) for node in rows.scalars().all()]
     affected = await bulk_delete_nodes(db, team_id=team_id, node_ids=payload.node_ids)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.bulk_deleted", resource_type="node_batch",
+        resource_name=f"{affected} nodes", before_data={"nodes": snapshots},
+        context={"affected": affected},
+    )
     await db.commit()
     return BulkActionResponse(affected=affected)
 
@@ -143,6 +157,14 @@ async def nodes_bulk_tag(
         node_ids=payload.node_ids,
         add=payload.add or None,
         remove=payload.remove or None,
+    )
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.bulk_tagged", resource_type="node_batch",
+        resource_name=f"{affected} nodes", context={
+            "node_ids": [str(node_id) for node_id in payload.node_ids],
+            "add": payload.add, "remove": payload.remove, "affected": affected,
+        },
     )
     await db.commit()
     return BulkActionResponse(affected=affected)
@@ -226,6 +248,15 @@ async def stale_review_decide(
         reviewed_by_id=user.id,
         owner_user_id=payload.owner_user_id,
     )
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.stale_review_decided",
+        resource_type="node_batch", resource_name=f"{affected} nodes",
+        context={"node_ids": [str(node_id) for node_id in payload.node_ids],
+                 "lifecycle_status": payload.lifecycle_status,
+                 "owner_user_id": str(payload.owner_user_id) if payload.owner_user_id else None,
+                 "affected": affected},
+    )
     await db.commit()
     return BulkActionResponse(affected=affected)
 
@@ -257,6 +288,7 @@ async def nodes_patch(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
     data = payload.model_dump(exclude_unset=True)
+    before = node_snapshot(node)
 
     if "parent_node_id" in data:
         try:
@@ -270,6 +302,12 @@ async def nodes_patch(
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     node = await update_node(db, node=node, data=data)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.updated", resource_type="node",
+        resource_id=node.id, resource_name=node.name, before_data=before,
+        after_data=node_snapshot(node),
+    )
     await db.commit()
     updated = await get_node(db, team_id=team_id, node_id=node.id)
     if updated is None:  # pragma: no cover - defensive after a successful update
@@ -288,6 +326,12 @@ async def nodes_delete(
     node = await get_node(db, team_id=team_id, node_id=node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
+    before = node_snapshot(node)
     await delete_node(db, node=node)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="node.deleted", resource_type="node",
+        resource_id=node.id, resource_name=node.name, before_data=before,
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

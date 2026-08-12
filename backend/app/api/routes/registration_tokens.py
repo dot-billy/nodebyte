@@ -14,6 +14,7 @@ from app.schemas.registration_tokens import (
     RegistrationTokenCreated,
     RegistrationTokenPublic,
 )
+from app.services.audit import record_audit_event
 from app.services.registration_tokens import (
     create_registration_token,
     get_registration_token_by_id,
@@ -37,6 +38,7 @@ def _to_public(
         "use_count": rt.use_count,
         "allowed_kinds": rt.allowed_kinds,
         "expires_at": rt.expires_at,
+        "last_used_at": rt.last_used_at,
         "is_active": rt.is_active,
         "is_usable": rt.is_usable,
         "created_at": rt.created_at,
@@ -59,6 +61,14 @@ async def create_token(
         max_uses=payload.max_uses,
         allowed_kinds=payload.allowed_kinds,
         expires_in_days=payload.expires_in_days,
+    )
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="registration_token.created",
+        resource_type="registration_token", resource_id=rt.id, resource_name=rt.label,
+        after_data={"label": rt.label, "token_prefix": rt.token_prefix,
+                    "max_uses": rt.max_uses, "allowed_kinds": rt.allowed_kinds,
+                    "expires_at": str(rt.expires_at) if rt.expires_at else None},
     )
     await db.commit()
     return _to_public(rt, created_by_email=user.email, token=token)
@@ -87,5 +97,11 @@ async def revoke_token(
     if not rt:
         raise HTTPException(status_code=404, detail="Token not found")
     await revoke_registration_token(db, rt=rt)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="registration_token.revoked",
+        resource_type="registration_token", resource_id=rt.id, resource_name=rt.label,
+        before_data={"is_active": True}, after_data={"is_active": False},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

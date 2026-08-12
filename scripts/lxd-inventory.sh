@@ -16,12 +16,14 @@ set -euo pipefail
 
 BASE_URL="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}"
 API="${BASE_URL}/api/register-node"
-BATCH_API="${BASE_URL}/api/register-nodes"
 TOKEN="${NODEBYTE_TOKEN:?Set NODEBYTE_TOKEN before running this script}"
 KIND="${NODEBYTE_KIND:-device}"
 EXTRA_TAGS="${NODEBYTE_TAGS:-}"
 REMOTE="${LXC_REMOTE:-}"
 NODEBYTE_BATCH="${NODEBYTE_BATCH:-1}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=inventory-sync-lib.sh
+source "${SCRIPT_DIR}/inventory-sync-lib.sh"
 BATCH_ITEMS='[]'
 
 for cmd in lxc jq curl; do
@@ -40,7 +42,8 @@ INSTANCES="$(lxc list "${PREFIX}" --format json 2>/dev/null)"
 
 COUNT="$(echo "$INSTANCES" | jq 'length')"
 if [[ "$COUNT" -eq 0 ]]; then
-  echo "No instances found."
+  echo "No instances found. Previewing an empty authoritative inventory."
+  nodebyte_sync_batch '[]' "lxd:${REMOTE:-local}:${LXD_HOST_FQDN}" "LXD ${REMOTE:-local} on ${LXD_HOST_FQDN}" "lxd" >/dev/null
   exit 0
 fi
 
@@ -120,6 +123,7 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
     --arg ip "$IP" \
     --argjson tags "$TAGS" \
     --argjson meta "$META" \
+    --arg external_id "${REMOTE:-local}:${NAME}" \
     '{
       name: $name,
       kind: $kind,
@@ -127,6 +131,7 @@ for row in $(echo "$INSTANCES" | jq -r '.[] | @base64'); do
       parent_hostname: $parent_hostname,
       tags: $tags,
       meta: $meta
+      ,external_id: $external_id
     }
     | if .ip == "" then del(.ip) else . end
     | if .parent_hostname == "" then del(.parent_hostname) else . end'
@@ -161,31 +166,11 @@ if [[ "$NODEBYTE_BATCH" == "1" ]]; then
   BATCH_COUNT="$(echo "$BATCH_ITEMS" | jq 'length')"
   if [[ "$BATCH_COUNT" != "0" ]]; then
     echo ""
-    echo "Sending batch of $BATCH_COUNT nodes..."
-
-    PAYLOAD="$(jq -n --arg token "$TOKEN" --argjson nodes "$BATCH_ITEMS" \
-      '{token: $token, nodes: $nodes}')"
-
-    RESP="$(curl -sS -X POST "$BATCH_API" \
-      -H "Content-Type: application/json" \
-      -d "$PAYLOAD" \
-      -w '\n%{http_code}')"
-
-    BODY="${RESP%$'\n'*}"
-    HTTP_CODE="${RESP##*$'\n'}"
-
-    if [[ "$HTTP_CODE" == "200" ]]; then
-      batch_created="$(echo "$BODY" | jq '.created')"
-      batch_updated="$(echo "$BODY" | jq '.updated')"
-      batch_skipped="$(echo "$BODY" | jq '.skipped')"
-      batch_errors="$(echo "$BODY" | jq '.errors')"
-      OK=$((batch_created + batch_updated))
-      FAIL=$((batch_skipped + batch_errors))
-      echo "  ✓ $batch_created created, $batch_updated updated, $batch_skipped skipped, $batch_errors errors"
+    echo "Previewing authoritative LXD inventory..."
+    if nodebyte_sync_batch "$BATCH_ITEMS" "lxd:${REMOTE:-local}:${LXD_HOST_FQDN}" "LXD ${REMOTE:-local} on ${LXD_HOST_FQDN}" "lxd" >/dev/null; then
+      OK=$BATCH_COUNT
     else
-      MSG="$(echo "$BODY" | jq -r '.detail // .' 2>/dev/null || echo "$BODY")"
-      echo "  ✗ Batch failed (HTTP $HTTP_CODE): $MSG"
-      FAIL=$COUNT
+      FAIL=$BATCH_COUNT
     fi
   fi
 fi

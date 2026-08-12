@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +10,8 @@ from app.db.session import get_db
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.teams import TeamCreate, TeamPublic
-from app.services.teams import create_team_with_owner, list_teams_for_user
+from app.services.audit import record_audit_event
+from app.services.teams import create_team_with_owner
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -37,6 +38,11 @@ async def create_team(
         raise HTTPException(status_code=500, detail="Could not allocate team slug")
 
     team = await create_team_with_owner(db, name=payload.name, slug=slug, owner_user_id=user.id)
+    await record_audit_event(
+        db, team_id=team.id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="team.created", resource_type="team",
+        resource_id=team.id, resource_name=team.name,
+        after_data={"name": team.name, "slug": team.slug},
+    )
     await db.commit()
     return team
-

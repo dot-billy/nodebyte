@@ -10,7 +10,13 @@ from app.core.rbac import VALID_ROLES, has_role, require_role, role_level
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.members import MemberPublic, MemberRoleUpdate
-from app.services.members import get_membership, list_members, remove_member, update_member_role
+from app.services.audit import record_audit_event
+from app.services.members import (
+    get_membership,
+    list_members,
+    remove_member,
+    update_member_role,
+)
 
 router = APIRouter(prefix="/teams/{team_id}/members", tags=["members"])
 
@@ -60,7 +66,14 @@ async def change_member_role(
     if not has_role(actor, "owner") and role_level(target.role) >= role_level(actor.role):
         raise HTTPException(status_code=403, detail="Cannot modify a member with equal or higher role")
 
+    old_role = target.role
     target = await update_member_role(db, membership=target, role=payload.role)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="membership.role_changed", resource_type="membership",
+        resource_id=target.id, resource_name=target.user.email,
+        before_data={"role": old_role}, after_data={"role": payload.role},
+    )
     await db.commit()
     await db.refresh(target, ["user"])
     return _member_to_public(target)
@@ -92,6 +105,15 @@ async def remove_team_member(
     if not has_role(actor, "owner") and role_level(target.role) >= role_level(actor.role):
         raise HTTPException(status_code=403, detail="Cannot remove a member with equal or higher role")
 
+    member_email = target.user.email
+    member_role = target.role
+    member_user_id = target.user_id
     await remove_member(db, membership=target)
+    await record_audit_event(
+        db, team_id=team_id, actor_type="user", actor_user_id=user.id,
+        actor_label=user.email, action="membership.removed", resource_type="membership",
+        resource_id=target.id, resource_name=member_email,
+        before_data={"role": member_role, "user_id": str(member_user_id)},
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

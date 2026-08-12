@@ -20,12 +20,14 @@ set -euo pipefail
 
 BASE_URL="${NODEBYTE_URL:?Set NODEBYTE_URL (e.g. https://nodebyte.example.com)}"
 API="${BASE_URL}/api/register-node"
-BATCH_API="${BASE_URL}/api/register-nodes"
 TOKEN="${NODEBYTE_TOKEN:?Set NODEBYTE_TOKEN before running this script}"
 KIND="${NODEBYTE_KIND:-device}"
 EXTRA_TAGS="${NODEBYTE_TAGS:-}"
 DOCKER_ALL="${DOCKER_ALL:-1}"
 NODEBYTE_BATCH="${NODEBYTE_BATCH:-1}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=inventory-sync-lib.sh
+source "${SCRIPT_DIR}/inventory-sync-lib.sh"
 
 MAX_NAME_LEN=200
 MAX_HOSTNAME_LEN=255
@@ -54,14 +56,15 @@ if [[ "$DOCKER_ALL" == "1" ]]; then
   PS_ARGS+=(-a)
 fi
 
-IDS="$(docker ps "${PS_ARGS[@]}" 2>/dev/null || true)"
-if [[ -z "${IDS//[[:space:]]/}" ]]; then
-  echo "No containers found."
+mapfile -t IDS < <(docker ps "${PS_ARGS[@]}" 2>/dev/null || true)
+if [[ "${#IDS[@]}" -eq 0 ]]; then
+  echo "No containers found. Previewing an empty authoritative inventory."
+  nodebyte_sync_batch '[]' "docker:${HOST_FQDN}" "Docker on ${HOST_FQDN}" "docker" >/dev/null
   exit 0
 fi
 
 echo "Inspecting containers..."
-INSPECT="$(docker inspect $IDS)"
+INSPECT="$(docker inspect "${IDS[@]}")"
 COUNT="$(echo "$INSPECT" | jq 'length')"
 
 echo "Found $COUNT container(s). Registering with Nodebyte..."
@@ -158,6 +161,7 @@ for row in $(echo "$INSPECT" | jq -r '.[] | @base64'); do
     --arg ip "$IP" \
     --argjson tags "$TAGS" \
     --argjson meta "$META" \
+    --arg external_id "$CID" \
     '{
       name: $name,
       kind: $kind,
@@ -165,6 +169,7 @@ for row in $(echo "$INSPECT" | jq -r '.[] | @base64'); do
       parent_hostname: $parent_hostname,
       tags: $tags,
       meta: $meta
+      ,external_id: $external_id
     }
     | if .ip == "" then del(.ip) else . end
     | if .parent_hostname == "" then del(.parent_hostname) else . end'
@@ -205,35 +210,14 @@ if [[ "$NODEBYTE_BATCH" == "1" ]]; then
   BATCH_COUNT="$(echo "$BATCH_ITEMS" | jq 'length')"
   if [[ "$BATCH_COUNT" != "0" ]]; then
     echo ""
-    echo "Sending batch of $BATCH_COUNT nodes..."
-
-    PAYLOAD="$(jq -n --arg token "$TOKEN" --argjson nodes "$BATCH_ITEMS" \
-      '{token: $token, nodes: $nodes}')"
-
-    RESP="$(curl -sS -X POST "$BATCH_API" \
-      -H "Content-Type: application/json" \
-      -d "$PAYLOAD" \
-      -w '\n%{http_code}')"
-
-    BODY="${RESP%$'\n'*}"
-    HTTP_CODE="${RESP##*$'\n'}"
-
-    if [[ "$HTTP_CODE" == "200" ]]; then
-      local_created="$(echo "$BODY" | jq '.created')"
-      local_updated="$(echo "$BODY" | jq '.updated')"
-      local_skipped="$(echo "$BODY" | jq '.skipped')"
-      local_errors="$(echo "$BODY" | jq '.errors')"
-      OK=$((local_created + local_updated))
-      FAIL=$((local_skipped + local_errors))
-      echo "  ✓ $local_created created, $local_updated updated, $local_skipped skipped, $local_errors errors"
+    echo "Previewing authoritative Docker inventory..."
+    if nodebyte_sync_batch "$BATCH_ITEMS" "docker:${HOST_FQDN}" "Docker on ${HOST_FQDN}" "docker" >/dev/null; then
+      OK=$BATCH_COUNT
     else
-      MSG="$(json_error_summary "$BODY")"
-      echo "  ✗ Batch failed (HTTP $HTTP_CODE): $MSG"
-      FAIL=$COUNT
+      FAIL=$BATCH_COUNT
     fi
   fi
 fi
 
 echo ""
 echo "Done. $OK ok, $FAIL failed (out of $COUNT)."
-

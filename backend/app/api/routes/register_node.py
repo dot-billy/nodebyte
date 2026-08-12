@@ -20,6 +20,7 @@ from app.schemas.registration_tokens import (
     BatchNodeResult,
     NodeRegisterRequest,
 )
+from app.services.audit import node_snapshot, record_audit_event
 from app.services.registration_tokens import (
     get_registration_token_by_value,
     register_or_update_node_with_token,
@@ -63,6 +64,13 @@ async def register_node(
 
     if not created:
         response.status_code = 200
+
+    await record_audit_event(
+        db, team_id=rt.team_id, actor_type="automation", actor_label=rt.label,
+        action="node.created" if created else "node.updated", resource_type="node",
+        resource_id=node.id, resource_name=node.name, after_data=node_snapshot(node),
+        context={"registration_token_id": str(rt.id), "endpoint": "register-node"},
+    )
 
     await db.commit()
     result = await db.execute(
@@ -132,6 +140,13 @@ async def register_nodes_batch(
             status="created" if was_created else "updated",
             node_id=node.id,
         ))
+
+        await record_audit_event(
+            db, team_id=rt.team_id, actor_type="automation", actor_label=rt.label,
+            action="node.created" if was_created else "node.updated", resource_type="node",
+            resource_id=node.id, resource_name=node.name, after_data=node_snapshot(node),
+            context={"registration_token_id": str(rt.id), "endpoint": "register-nodes"},
+        )
 
     await db.commit()
 

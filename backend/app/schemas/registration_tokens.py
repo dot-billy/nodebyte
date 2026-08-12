@@ -23,6 +23,7 @@ class RegistrationTokenPublic(BaseModel):
     use_count: int
     allowed_kinds: list[str] | None
     expires_at: datetime | None
+    last_used_at: datetime | None
     is_active: bool
     is_usable: bool
     created_at: datetime
@@ -57,6 +58,7 @@ class NodeRegisterItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
     meta: dict = Field(default_factory=dict)
     notes: str | None = None
+    external_id: str | None = Field(default=None, max_length=255)
 
 
 class BatchNodeRegisterRequest(BaseModel):
