@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 
-API_TOKEN_PREFIX = "nb_pat_"
+API_TOKEN_PREFIX = "nb_pat_"  # nosec B105
 
 
 def generate_api_token() -> str:
@@ -12,7 +12,8 @@ def generate_api_token() -> str:
 
 
 def hash_api_token(token: str) -> str:
-    """Return the irreversible lookup value stored in the database."""
+    """Hash a generated 256-bit opaque token for equality lookup, not a password."""
+    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 

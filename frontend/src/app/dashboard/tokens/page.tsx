@@ -227,7 +227,7 @@ export default function RegistrationTokensPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium">{rt.label}</div>
                     <div className="mt-0.5 font-mono text-xs text-[hsl(var(--muted-foreground))]">
-                      {rt.token.slice(0, 12)}...
+                      {rt.token_prefix}…
                     </div>
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
@@ -265,7 +265,6 @@ export default function RegistrationTokensPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <CopyTokenButton token={rt.token} />
                       {rt.is_active && (
                         <Button variant="ghost" size="sm" onClick={() => handleRevoke(rt)} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950">
                           <Ban className="h-3.5 w-3.5" />

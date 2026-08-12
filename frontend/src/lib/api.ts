@@ -93,10 +93,14 @@ export interface InvitePublic {
   team_id: string;
   invited_email: string;
   role: string;
-  token: string;
+  token_prefix: string;
   invited_by_email: string | null;
   created_at: string;
   expires_at: string;
+}
+
+export interface InviteCreated extends InvitePublic {
+  token: string;
 }
 
 export interface InviteInfo {
@@ -114,7 +118,7 @@ export interface RegistrationTokenPublic {
   id: string;
   team_id: string;
   label: string;
-  token: string;
+  token_prefix: string;
   created_by_email: string | null;
   max_uses: number | null;
   use_count: number;
@@ -123,6 +127,10 @@ export interface RegistrationTokenPublic {
   is_active: boolean;
   is_usable: boolean;
   created_at: string;
+}
+
+export interface RegistrationTokenCreated extends RegistrationTokenPublic {
+  token: string;
 }
 
 export interface NodePublic {
@@ -139,6 +147,12 @@ export interface NodePublic {
   notes: string | null;
   last_seen_at: string | null;
   last_seen_source: string | null;
+  lifecycle_status: "active" | "ignored" | "retired";
+  reviewed_at: string | null;
+  reviewed_by_id: string | null;
+  reviewed_by_email: string | null;
+  owner_user_id: string | null;
+  owner_email: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -162,6 +176,19 @@ export interface NodeStats {
   top_tags: TagCount[];
   ip_segments: { segment: string; node_count: number; address_count: number }[];
   ip_family_nodes: Record<string, number>;
+}
+
+export interface StaleReviewSummary {
+  stale_after_days: number;
+  pending: number;
+  ignored: number;
+  retired: number;
+  total_stale: number;
+}
+
+export interface StaleReviewQueue {
+  summary: StaleReviewSummary;
+  nodes: NodePublic[];
 }
 
 export interface PublicSettings {
@@ -277,7 +304,7 @@ export const api = {
       return request<InvitePublic[]>(`/api/teams/${teamId}/invites`);
     },
     create(teamId: string, data: { email: string; role: string }) {
-      return request<InvitePublic>(`/api/teams/${teamId}/invites`, {
+      return request<InviteCreated>(`/api/teams/${teamId}/invites`, {
         method: "POST",
         body: JSON.stringify(data),
       });
@@ -299,7 +326,7 @@ export const api = {
       return request<RegistrationTokenPublic[]>(`/api/teams/${teamId}/registration-tokens`);
     },
     create(teamId: string, data: { label: string; max_uses?: number | null; allowed_kinds?: string[] | null; expires_in_days?: number | null }) {
-      return request<RegistrationTokenPublic>(`/api/teams/${teamId}/registration-tokens`, {
+      return request<RegistrationTokenCreated>(`/api/teams/${teamId}/registration-tokens`, {
         method: "POST",
         body: JSON.stringify(data),
       });
@@ -315,7 +342,7 @@ export const api = {
     stats(teamId: string) {
       return request<NodeStats>(`/api/teams/${teamId}/nodes/stats`);
     },
-    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number; kind?: string[]; has_url?: boolean; tags?: string[]; is_orphan?: boolean }) {
+    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number; kind?: string[]; has_url?: boolean; tags?: string[]; is_orphan?: boolean; lifecycle_status?: string[]; stale_after_days?: number }) {
       const qs = new URLSearchParams();
       if (params?.q) qs.set("q", params.q);
       if (params?.parent_id) qs.set("parent_id", params.parent_id);
@@ -325,6 +352,8 @@ export const api = {
       if (params?.has_url !== undefined && params.has_url !== null) qs.set("has_url", String(params.has_url));
       if (params?.tags?.length) for (const t of params.tags) qs.append("tags", t);
       if (params?.is_orphan !== undefined && params.is_orphan !== null) qs.set("is_orphan", String(params.is_orphan));
+      if (params?.lifecycle_status?.length) for (const s of params.lifecycle_status) qs.append("lifecycle_status", s);
+      if (params?.stale_after_days) qs.set("stale_after_days", String(params.stale_after_days));
       const q = qs.toString();
       return request<NodePublic[]>(`/api/teams/${teamId}/nodes${q ? `?${q}` : ""}`);
     },
@@ -339,6 +368,20 @@ export const api = {
     },
     delete(teamId: string, nodeId: string) {
       return request<void>(`/api/teams/${teamId}/nodes/${nodeId}`, { method: "DELETE" });
+    },
+    staleReview(teamId: string, staleAfterDays = 30) {
+      return request<StaleReviewQueue>(
+        `/api/teams/${teamId}/nodes/stale-review?stale_after_days=${staleAfterDays}`
+      );
+    },
+    decideStaleReview(
+      teamId: string,
+      data: { node_ids: string[]; lifecycle_status: "active" | "ignored" | "retired"; owner_user_id?: string | null }
+    ) {
+      return request<{ affected: number }>(`/api/teams/${teamId}/nodes/stale-review/decide`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
     },
     bulkDelete(teamId: string, nodeIds: string[]) {
       return request<{ affected: number }>(`/api/teams/${teamId}/nodes/bulk-delete`, {

@@ -17,7 +17,7 @@ class RegistrationTokenPublic(BaseModel):
     id: uuid.UUID
     team_id: uuid.UUID
     label: str
-    token: str
+    token_prefix: str
     created_by_email: str | None = None
     max_uses: int | None
     use_count: int
@@ -26,6 +26,10 @@ class RegistrationTokenPublic(BaseModel):
     is_active: bool
     is_usable: bool
     created_at: datetime
+
+
+class RegistrationTokenCreated(RegistrationTokenPublic):
+    token: str
 
 
 class NodeRegisterRequest(BaseModel):

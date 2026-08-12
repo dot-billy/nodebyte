@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from jwt import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,8 +9,6 @@ from app.core.config import settings
 from app.core.rate_limit import rate_limit_login, rate_limit_register
 from app.core.security import (
     create_access_token,
-    create_refresh_token,
-    decode_token,
     verify_password,
 )
 from app.core.slug import slugify
@@ -31,6 +26,13 @@ from app.schemas.auth import (
 from app.schemas.users import UserPublic, UserUpdate
 from app.services.api_tokens import revoke_all_api_tokens
 from app.services.invites import accept_invite, get_invite_by_token
+from app.services.refresh_sessions import (
+    RefreshSessionError,
+    issue_refresh_session,
+    revoke_all_refresh_sessions,
+    revoke_refresh_family,
+    rotate_refresh_session,
+)
 from app.services.teams import create_team_with_owner
 from app.services.users import authenticate, create_user, get_user_by_email, update_user
 
@@ -55,6 +57,20 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         max_age=settings.refresh_token_expires_days * 24 * 3600,
         path="/",
     )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        REFRESH_COOKIE_NAME,
+        path="/",
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
+
+
+def _request_metadata(request: Request) -> tuple[str | None, str | None]:
+    ip = request.client.host if request.client else None
+    return ip, request.headers.get("user-agent")
 
 
 @router.get("/public-settings")
@@ -117,10 +133,12 @@ async def register(
             raise HTTPException(status_code=500, detail="Could not allocate team slug")
         await create_team_with_owner(db, name=payload.team_name.strip(), slug=slug, owner_user_id=user.id)
 
-    await db.commit()
-
     access = create_access_token(user_id=user.id)
-    refresh = create_refresh_token(user_id=user.id)
+    ip, user_agent = _request_metadata(request)
+    _, refresh = await issue_refresh_session(
+        db, user_id=user.id, ip=ip, user_agent=user_agent
+    )
+    await db.commit()
     _set_refresh_cookie(response, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh)
 
@@ -144,7 +162,11 @@ async def login(
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
     access = create_access_token(user_id=user.id)
-    refresh = create_refresh_token(user_id=user.id)
+    ip, user_agent = _request_metadata(request)
+    _, refresh = await issue_refresh_session(
+        db, user_id=user.id, ip=ip, user_agent=user_agent
+    )
+    await db.commit()
     _set_refresh_cookie(response, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh)
 
@@ -159,27 +181,42 @@ async def refresh(
     token = request.cookies.get(REFRESH_COOKIE_NAME) or (body and body.refresh_token)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+    ip, user_agent = _request_metadata(request)
     try:
-        payload = decode_token(token)
-        if payload.get("typ") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        user_id = uuid.UUID(payload["sub"])
-    except (InvalidTokenError, KeyError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        user_id, new_refresh = await rotate_refresh_session(
+            db, raw_token=token, ip=ip, user_agent=user_agent
+        )
+    except RefreshSessionError as exc:
+        await db.commit()
+        _clear_refresh_cookie(response)
+        detail = "Refresh token reuse detected; this session has been revoked" if exc.reuse_detected else "Invalid refresh token"
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail) from exc
 
     user = await db.get(User, user_id)
     if not user or not user.is_active:
+        await revoke_all_refresh_sessions(db, user_id=user_id)
+        await db.commit()
+        _clear_refresh_cookie(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
+    await db.commit()
     access = create_access_token(user_id=user.id)
-    new_refresh = create_refresh_token(user_id=user.id)
     _set_refresh_cookie(response, new_refresh)
     return TokenResponse(access_token=access, refresh_token=new_refresh)
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(response: Response) -> MessageResponse:
-    response.delete_cookie(REFRESH_COOKIE_NAME, path="/")
+async def logout(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    token = request.cookies.get(REFRESH_COOKIE_NAME) or (body and body.refresh_token)
+    if token:
+        await revoke_refresh_family(db, raw_token=token)
+        await db.commit()
+    _clear_refresh_cookie(response)
     return MessageResponse(message="Logged out")
 
 
@@ -218,5 +255,6 @@ async def update_me(
     updated = await update_user(db, user=user, **kwargs)
     if "new_password" in fields:
         await revoke_all_api_tokens(db, user_id=user.id)
+        await revoke_all_refresh_sessions(db, user_id=user.id)
     await db.commit()
     return updated

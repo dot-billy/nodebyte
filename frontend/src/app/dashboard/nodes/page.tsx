@@ -45,6 +45,7 @@ export default function NodesPage() {
         has_url: filters.hasUrl ?? undefined,
         tags: filters.tags.length > 0 ? filters.tags : undefined,
         is_orphan: filters.isOrphan ?? undefined,
+        lifecycle_status: ["active"],
       });
       setNodes(data);
     } catch {

@@ -21,3 +21,23 @@ def test_ci_does_not_mask_backend_test_failures() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
     assert "pytest tests/ -v --tb=short || true" not in workflow
+
+
+def test_codeql_scans_python_and_typescript() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "codeql.yml").read_text()
+
+    assert "javascript-typescript" in workflow
+    assert "python" in workflow
+    assert "security-extended" in workflow
+
+
+def test_plaintext_invite_and_registration_token_columns_are_gone() -> None:
+    invite_model = (ROOT / "backend" / "app" / "models" / "invite.py").read_text()
+    registration_model = (
+        ROOT / "backend" / "app" / "models" / "registration_token.py"
+    ).read_text()
+
+    assert "token_hash" in invite_model
+    assert "token_hash" in registration_model
+    assert " token:" not in invite_model
+    assert " token:" not in registration_model

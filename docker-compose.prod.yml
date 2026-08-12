@@ -1,4 +1,16 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
   db:
     image: postgres:16
     restart: unless-stopped
@@ -24,6 +36,7 @@ services:
     init: true
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodebyte}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nodebyte}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN must be set}
       PYTHONPATH: /app
       NODEBYTE_ENV: production
@@ -38,6 +51,8 @@ services:
       TURNSTILE_ENABLED: ${TURNSTILE_ENABLED:-true}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"

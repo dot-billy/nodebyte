@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     nodebyte_env: str = "dev"
 
     database_url: str
+    redis_url: str = "redis://redis:6379/0"
 
     jwt_secret: str
     jwt_issuer: str = "nodebyte"
@@ -37,4 +38,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

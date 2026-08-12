@@ -18,6 +18,7 @@ import {
   Shield,
   UsersRound,
   Building2,
+  Archive,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
@@ -27,7 +28,8 @@ import { CreateTeamDialog } from "@/components/create-team-dialog";
 
 const NAV_ITEMS: readonly { href: string; label: string; icon: typeof LayoutDashboard; exact?: boolean; muted?: boolean }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/dashboard/nodes", label: "Nodes", icon: Server },
+  { href: "/dashboard/nodes", label: "Nodes", icon: Server, exact: true },
+  { href: "/dashboard/nodes/review", label: "Stale review", icon: Archive },
   { href: "/dashboard/team", label: "Team", icon: Users },
   { href: "/dashboard/tokens", label: "Tokens", icon: KeyRound },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
@@ -52,10 +54,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/login");
     }
   }, [loading, user, router]);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
 
   if (loading) {
     return (
@@ -114,7 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navLinks = (
     <nav className="flex-1 space-y-1 p-3">
       {NAV_ITEMS.map(({ href, label, icon: Icon, exact, muted }) => (
-        <Link key={href} href={href} className={navLinkClass(href, exact, muted)}>
+        <Link key={href} href={href} onClick={() => setMobileMenuOpen(false)} className={navLinkClass(href, exact, muted)}>
           <Icon className="h-4 w-4" />
           {label}
         </Link>
@@ -126,7 +124,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Admin
           </div>
           {ADMIN_NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => (
-            <Link key={href} href={href} className={navLinkClass(href, exact)}>
+            <Link key={href} href={href} onClick={() => setMobileMenuOpen(false)} className={navLinkClass(href, exact)}>
               <Icon className="h-4 w-4" />
               {label}
             </Link>

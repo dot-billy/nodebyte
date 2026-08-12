@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -10,8 +9,9 @@ from sqlalchemy.orm import joinedload
 
 from app.models.node import Node
 from app.models.registration_token import RegistrationToken
+from app.core.opaque_tokens import generate_opaque_token, hash_opaque_token
 
-TOKEN_BYTES = 32
+REGISTRATION_TOKEN_PREFIX = "nb_reg_"  # nosec B105
 
 
 def _merge_unique_strs(existing: list[str] | None, incoming: list[str] | None) -> list[str]:
@@ -54,8 +54,8 @@ async def create_registration_token(
     max_uses: int | None = None,
     allowed_kinds: list[str] | None = None,
     expires_in_days: int | None = None,
-) -> RegistrationToken:
-    token = secrets.token_urlsafe(TOKEN_BYTES)
+) -> tuple[RegistrationToken, str]:
+    token, token_hash, token_prefix = generate_opaque_token(prefix=REGISTRATION_TOKEN_PREFIX)
     expires_at = (
         datetime.now(timezone.utc) + timedelta(days=expires_in_days)
         if expires_in_days
@@ -64,7 +64,8 @@ async def create_registration_token(
     rt = RegistrationToken(
         team_id=team_id,
         label=label,
-        token=token,
+        token_hash=token_hash,
+        token_prefix=token_prefix,
         created_by_id=created_by_id,
         max_uses=max_uses,
         allowed_kinds=allowed_kinds,
@@ -72,7 +73,7 @@ async def create_registration_token(
     )
     db.add(rt)
     await db.flush()
-    return rt
+    return rt, token
 
 
 async def list_registration_tokens(
@@ -111,7 +112,7 @@ async def get_registration_token_by_value(
     res = await db.execute(
         select(RegistrationToken)
         .options(joinedload(RegistrationToken.team))
-        .where(RegistrationToken.token == token)
+        .where(RegistrationToken.token_hash == hash_opaque_token(token))
     )
     return res.scalar_one_or_none()
 
@@ -199,6 +200,9 @@ async def register_or_update_node_with_token(
         existing.updated_at = now
         existing.last_seen_at = now
         existing.last_seen_source = "register-node"
+        existing.lifecycle_status = "active"
+        existing.reviewed_at = None
+        existing.reviewed_by_id = None
         await db.flush()
         return existing, False
 

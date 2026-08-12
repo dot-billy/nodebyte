@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { connection } from "next/server";
 
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
@@ -11,7 +12,10 @@ export const metadata: Metadata = {
   description: "Modern inventory for devices and sites.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Nonce-based CSP requires request-time rendering so Next can apply the
+  // per-request nonce to every framework and inline script.
+  await connection();
   return (
     <html lang="en">
       <body className={inter.className}>

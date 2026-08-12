@@ -34,7 +34,10 @@ export default function AdminTeamsPage() {
       .finally(() => setLoading(false));
   }, [debouncedSearch]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   function openCreate() {
     setDialogMode("create");
