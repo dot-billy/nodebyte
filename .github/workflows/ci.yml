@@ -110,6 +110,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate production Compose definition
+        env:
+          POSTGRES_PASSWORD: ci-dummy-password
+          FRONTEND_ORIGIN: https://nodebyte.example.com
+          JWT_SECRET: ci-dummy-jwt-secret
+          TURNSTILE_SECRET_KEY: ci-dummy-turnstile-secret
+          NEXT_PUBLIC_API_BASE_URL: https://nodebyte.example.com/api
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ci-dummy-turnstile-site-key
+        run: docker compose -f docker-compose.prod.yml config --quiet
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build backend image

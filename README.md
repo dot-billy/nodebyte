@@ -216,7 +216,19 @@ You must have a registered account and the backend running on `http://localhost:
 
 ## Production Deployment
 
-When deploying to production, address each item in this checklist:
+Use the production Compose definition so the application runs from immutable,
+non-root images without source-code bind mounts or a published database port:
+
+```bash
+docker compose -f docker-compose.prod.yml config
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml ps
+```
+
+Back up the `nodebyte_postgres` volume before applying migrations. The backend
+production image applies Alembic migrations before starting Uvicorn. Address
+each item in this checklist before the rollout:
 
 - [ ] **`JWT_SECRET`** — set to a long random string (`openssl rand -hex 32`)
 - [ ] **`POSTGRES_PASSWORD`** — set to a strong, unique password
@@ -225,7 +237,7 @@ When deploying to production, address each item in this checklist:
 - [ ] **`FRONTEND_ORIGIN`** — set to your actual frontend URL (e.g. `https://nodebyte.example.com`)
 - [ ] **`NEXT_PUBLIC_API_BASE_URL`** — set to your actual API URL
 - [ ] **Turnstile** — replace test keys with real Cloudflare Turnstile keys, or set `TURNSTILE_ENABLED=false` to disable
-- [ ] **Uvicorn** — remove `--reload` from `backend/entrypoint.sh` and consider adding `--workers N`
+- [ ] **Compose** — use `docker-compose.prod.yml`, which runs Uvicorn without `--reload`
 - [ ] **HTTPS** — terminate TLS with a reverse proxy (nginx, Caddy, Traefik) in front of the containers
 - [ ] **Volumes** — ensure `nodebyte_postgres` is backed up or mapped to persistent storage
 
@@ -264,7 +276,8 @@ nodebyte/
 │   ├── manifest.json
 │   └── src/
 ├── scripts/              # Utility scripts
-├── docker-compose.yml
+├── docker-compose.yml       # local development
+├── docker-compose.prod.yml  # hardened production runtime
 └── create-extension.sh
 ```
 
