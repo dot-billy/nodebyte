@@ -123,7 +123,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - name: Build backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: false
@@ -131,7 +131,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
       - name: Build frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: false
@@ -139,7 +139,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
       - name: Build production backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile.prod
@@ -150,7 +150,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend-prod
 
       - name: Build production frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile.prod
@@ -161,7 +161,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend-prod
 
       - name: Build MCP image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./mcp
           push: false
