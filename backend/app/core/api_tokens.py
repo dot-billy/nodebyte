@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 
-API_TOKEN_PREFIX = "nb_pat_"
+API_TOKEN_PREFIX = "nb_pat_"  # nosec B105
 
 
 def generate_api_token() -> str:

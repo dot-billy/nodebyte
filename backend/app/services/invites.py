@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -10,8 +9,9 @@ from sqlalchemy.orm import joinedload
 
 from app.models.invite import Invite
 from app.models.membership import Membership
+from app.core.opaque_tokens import generate_opaque_token, hash_opaque_token
 
-INVITE_TOKEN_BYTES = 32
+INVITE_TOKEN_PREFIX = "nb_inv_"  # nosec B105
 INVITE_EXPIRY_DAYS = 7
 
 
@@ -22,19 +22,20 @@ async def create_invite(
     invited_email: str,
     role: str,
     invited_by_id: uuid.UUID,
-) -> Invite:
-    token = secrets.token_urlsafe(INVITE_TOKEN_BYTES)
+) -> tuple[Invite, str]:
+    token, token_hash, token_prefix = generate_opaque_token(prefix=INVITE_TOKEN_PREFIX)
     invite = Invite(
         team_id=team_id,
         invited_email=invited_email.lower().strip(),
         role=role,
-        token=token,
+        token_hash=token_hash,
+        token_prefix=token_prefix,
         invited_by_id=invited_by_id,
         expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_EXPIRY_DAYS),
     )
     db.add(invite)
     await db.flush()
-    return invite
+    return invite, token
 
 
 async def list_invites(db: AsyncSession, *, team_id: uuid.UUID) -> list[Invite]:
@@ -52,7 +53,7 @@ async def get_invite_by_token(db: AsyncSession, *, token: str) -> Invite | None:
     res = await db.execute(
         select(Invite)
         .options(joinedload(Invite.team))
-        .where(Invite.token == token)
+        .where(Invite.token_hash == hash_opaque_token(token))
     )
     return res.scalar_one_or_none()
 

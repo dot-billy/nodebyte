@@ -55,8 +55,10 @@ export function Turnstile({ siteKey, onVerify, onExpire, className }: TurnstileP
   const onVerifyRef = useRef(onVerify);
   const onExpireRef = useRef(onExpire);
 
-  onVerifyRef.current = onVerify;
-  onExpireRef.current = onExpire;
+  useEffect(() => {
+    onVerifyRef.current = onVerify;
+    onExpireRef.current = onExpire;
+  }, [onVerify, onExpire]);
 
   const key = siteKey || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 

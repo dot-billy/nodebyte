@@ -362,7 +362,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
 
     loadRelations();
     return () => { cancelled = true; };
-  }, [open, node?.id, node?.team_id, node?.parent_node_id]);
+  }, [open, node]);
 
   if (!open || !node) return null;
 

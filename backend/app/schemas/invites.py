@@ -14,7 +14,7 @@ class InviteCreate(BaseModel):
 
     def model_post_init(self, __context: object) -> None:
         if self.role not in VALID_ROLES or self.role == "owner":
-            raise ValueError(f"role must be one of: viewer, member, admin")
+            raise ValueError("role must be one of: viewer, member, admin")
 
 
 class InvitePublic(BaseModel):
@@ -22,12 +22,16 @@ class InvitePublic(BaseModel):
     team_id: uuid.UUID
     invited_email: str
     role: str
-    token: str
+    token_prefix: str
     invited_by_email: str | None = None
     created_at: datetime
     expires_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class InviteCreated(InvitePublic):
+    token: str
 
 
 class InviteInfo(BaseModel):

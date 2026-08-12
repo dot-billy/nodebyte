@@ -10,17 +10,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
+from app.models.membership import Membership
 from app.models.node import Node
 from app.models.user import User
-from app.schemas.nodes import BulkActionResponse, BulkDeleteRequest, BulkTagRequest, NodeCreate, NodePublic, NodeStats, NodeUpdate
+from app.schemas.nodes import (
+    BulkActionResponse,
+    BulkDeleteRequest,
+    BulkTagRequest,
+    NodeCreate,
+    NodePublic,
+    NodeStats,
+    NodeUpdate,
+    StaleReviewDecision,
+    StaleReviewQueue,
+)
 from app.services.ansible_inventory import build_ansible_inventory
 from app.services.nodes import (
     bulk_delete_nodes,
     bulk_update_tags,
+    apply_stale_review_decision,
     count_nodes,
     create_node,
     delete_node,
     get_node_stats,
+    get_stale_review_queue,
     get_node,
     list_nodes,
     update_node,
@@ -60,6 +73,8 @@ async def nodes_list(
     has_url: bool | None = Query(default=None),
     tags: list[str] | None = Query(default=None),
     is_orphan: bool | None = Query(default=None),
+    lifecycle_status: list[str] | None = Query(default=None),
+    stale_after_days: int | None = Query(default=None, ge=1, le=3650),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
@@ -69,6 +84,7 @@ async def nodes_list(
     return await list_nodes(
         db, team_id=team_id, q=q, parent_id=parent_id,
         kind=kind, has_url=has_url, tags=tags, is_orphan=is_orphan,
+        lifecycle_status=lifecycle_status, stale_after_days=stale_after_days,
         limit=limit, offset=offset,
     )
 
@@ -94,9 +110,10 @@ async def nodes_create(
 
     node = await create_node(db, team_id=team_id, data=data)
     await db.commit()
-    # Ensure DB-generated fields are loaded for serialization.
-    await db.refresh(node)
-    return node
+    created = await get_node(db, team_id=team_id, node_id=node.id)
+    if created is None:  # pragma: no cover - defensive after a successful insert
+        raise HTTPException(status_code=500, detail="Node creation could not be verified")
+    return created
 
 
 @router.post("/bulk-delete", response_model=BulkActionResponse)
@@ -168,6 +185,51 @@ async def nodes_export_ansible(
     )
 
 
+@router.get("/stale-review", response_model=StaleReviewQueue)
+async def stale_review_queue(
+    team_id: uuid.UUID,
+    stale_after_days: int = Query(default=30, ge=1, le=3650),
+    limit: int = Query(default=200, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StaleReviewQueue:
+    await require_role(db, user=user, team_id=team_id, min_role="viewer")
+    return await get_stale_review_queue(
+        db,
+        team_id=team_id,
+        stale_after_days=stale_after_days,
+        limit=limit,
+    )
+
+
+@router.post("/stale-review/decide", response_model=BulkActionResponse)
+async def stale_review_decide(
+    team_id: uuid.UUID,
+    payload: StaleReviewDecision,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BulkActionResponse:
+    await require_role(db, user=user, team_id=team_id, min_role="member")
+    if payload.owner_user_id is not None:
+        owner = await db.execute(
+            select(Membership.id)
+            .where(Membership.team_id == team_id)
+            .where(Membership.user_id == payload.owner_user_id)
+        )
+        if owner.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail="Owner must be a team member")
+    affected = await apply_stale_review_decision(
+        db,
+        team_id=team_id,
+        node_ids=payload.node_ids,
+        lifecycle_status=payload.lifecycle_status,
+        reviewed_by_id=user.id,
+        owner_user_id=payload.owner_user_id,
+    )
+    await db.commit()
+    return BulkActionResponse(affected=affected)
+
+
 @router.get("/{node_id}", response_model=NodePublic)
 async def nodes_get(
     team_id: uuid.UUID,
@@ -209,9 +271,10 @@ async def nodes_patch(
 
     node = await update_node(db, node=node, data=data)
     await db.commit()
-    # Ensure any server-side updates are loaded for serialization.
-    await db.refresh(node)
-    return node
+    updated = await get_node(db, team_id=team_id, node_id=node.id)
+    if updated is None:  # pragma: no cover - defensive after a successful update
+        raise HTTPException(status_code=500, detail="Node update could not be verified")
+    return updated
 
 
 @router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -228,4 +291,3 @@ async def nodes_delete(
     await delete_node(db, node=node)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-

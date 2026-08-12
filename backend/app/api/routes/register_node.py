@@ -3,13 +3,16 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.rate_limit import (
     rate_limit_register_node,
     rate_limit_register_nodes_batch,
 )
 from app.db.session import get_db
+from app.models.node import Node
 from app.schemas.nodes import NodePublic
 from app.schemas.registration_tokens import (
     BatchNodeRegisterRequest,
@@ -62,8 +65,15 @@ async def register_node(
         response.status_code = 200
 
     await db.commit()
-    await db.refresh(node)
-    return node
+    result = await db.execute(
+        select(Node)
+        .options(joinedload(Node.owner), joinedload(Node.reviewed_by))
+        .where(Node.id == node.id)
+        .execution_options(populate_existing=True)
+    )
+    registered = result.scalar_one()
+    await db.refresh(registered, attribute_names=["owner", "reviewed_by"])
+    return registered
 
 
 @router.post("/register-nodes", response_model=BatchNodeRegisterResponse)

@@ -1,4 +1,13 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   db:
     image: postgres:16
     restart: unless-stopped
@@ -24,6 +33,7 @@ services:
     environment:
       # Override localhost DB URL for container networking
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodebyte}:${POSTGRES_PASSWORD:-devpassword}@db:5432/${POSTGRES_DB:-nodebyte}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       PYTHONPATH: /app
       NODEBYTE_ENV: ${NODEBYTE_ENV:-dev}
@@ -38,6 +48,8 @@ services:
       TURNSTILE_ENABLED: ${TURNSTILE_ENABLED:-true}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -65,4 +77,3 @@ services:
 volumes:
   nodebyte_postgres:
   nodebyte_frontend_node_modules:
-

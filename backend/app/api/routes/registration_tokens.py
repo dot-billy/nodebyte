@@ -9,7 +9,11 @@ from app.api.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.registration_tokens import RegistrationTokenCreate, RegistrationTokenPublic
+from app.schemas.registration_tokens import (
+    RegistrationTokenCreate,
+    RegistrationTokenCreated,
+    RegistrationTokenPublic,
+)
 from app.services.registration_tokens import (
     create_registration_token,
     get_registration_token_by_id,
@@ -20,12 +24,14 @@ from app.services.registration_tokens import (
 router = APIRouter(prefix="/teams/{team_id}/registration-tokens", tags=["registration-tokens"])
 
 
-def _to_public(rt, created_by_email: str | None = None) -> dict:
+def _to_public(
+    rt, created_by_email: str | None = None, token: str | None = None
+) -> dict:
     return {
         "id": rt.id,
         "team_id": rt.team_id,
         "label": rt.label,
-        "token": rt.token,
+        "token_prefix": rt.token_prefix,
         "created_by_email": created_by_email or (rt.created_by.email if rt.created_by else None),
         "max_uses": rt.max_uses,
         "use_count": rt.use_count,
@@ -34,10 +40,10 @@ def _to_public(rt, created_by_email: str | None = None) -> dict:
         "is_active": rt.is_active,
         "is_usable": rt.is_usable,
         "created_at": rt.created_at,
-    }
+    } | ({"token": token} if token is not None else {})
 
 
-@router.post("", response_model=RegistrationTokenPublic, status_code=201)
+@router.post("", response_model=RegistrationTokenCreated, status_code=201)
 async def create_token(
     team_id: uuid.UUID,
     payload: RegistrationTokenCreate,
@@ -45,7 +51,7 @@ async def create_token(
     db: AsyncSession = Depends(get_db),
 ):
     await require_role(db, user=user, team_id=team_id, min_role="admin")
-    rt = await create_registration_token(
+    rt, token = await create_registration_token(
         db,
         team_id=team_id,
         label=payload.label,
@@ -55,7 +61,7 @@ async def create_token(
         expires_in_days=payload.expires_in_days,
     )
     await db.commit()
-    return _to_public(rt, created_by_email=user.email)
+    return _to_public(rt, created_by_email=user.email, token=token)
 
 
 @router.get("", response_model=list[RegistrationTokenPublic])

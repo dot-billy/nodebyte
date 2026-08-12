@@ -10,26 +10,26 @@ from app.api.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.invites import InviteCreate, InviteInfo, InvitePublic
+from app.schemas.invites import InviteCreate, InviteCreated, InviteInfo, InvitePublic
 from app.services.invites import accept_invite, create_invite, get_invite_by_token, list_invites, revoke_invite
 
 router = APIRouter(tags=["invites"])
 
 
-def _invite_to_public(invite) -> dict:
+def _invite_to_public(invite, token: str | None = None) -> dict:
     return {
         "id": invite.id,
         "team_id": invite.team_id,
         "invited_email": invite.invited_email,
         "role": invite.role,
-        "token": invite.token,
+        "token_prefix": invite.token_prefix,
         "invited_by_email": invite.invited_by.email if invite.invited_by else None,
         "created_at": invite.created_at,
         "expires_at": invite.expires_at,
-    }
+    } | ({"token": token} if token is not None else {})
 
 
-@router.post("/teams/{team_id}/invites", response_model=InvitePublic, status_code=201)
+@router.post("/teams/{team_id}/invites", response_model=InviteCreated, status_code=201)
 async def create_team_invite(
     team_id: uuid.UUID,
     payload: InviteCreate,
@@ -38,7 +38,7 @@ async def create_team_invite(
 ) -> dict:
     await require_role(db, user=user, team_id=team_id, min_role="admin")
 
-    invite = await create_invite(
+    invite, token = await create_invite(
         db,
         team_id=team_id,
         invited_email=payload.email,
@@ -47,7 +47,7 @@ async def create_team_invite(
     )
     await db.commit()
     await db.refresh(invite, ["invited_by"])
-    return _invite_to_public(invite)
+    return _invite_to_public(invite, token)
 
 
 @router.get("/teams/{team_id}/invites", response_model=list[InvitePublic])

@@ -18,6 +18,7 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Browser extension** — add any website to your inventory with one click (Chrome, Manifest V3)
 - **Bookmark sync** — nodes with URLs automatically sync to browser bookmarks, organized by kind
 - **Bulk operations** — multi-select nodes to delete or tag in batch
+- **Stale inventory review** — triage inactive nodes in bulk, assign an owner, and keep, ignore, or retire them
 - **Invite system** — invite team members by email with role-based access
 - **Super admin console** — platform-wide user and team management for superusers
 
@@ -43,6 +44,7 @@ flowchart LR
     Extension["Chrome Extension"] --> Backend
     Frontend -->|"/api/*"| Backend["FastAPI\n:8000"]
     Backend --> DB[("PostgreSQL\n:5432")]
+    Backend --> Redis[("Redis\nrate limits")]
 ```
 
 The frontend proxies all `/api/*` requests to the backend, keeping auth cookies same-origin. The Chrome extension talks directly to the backend API.
@@ -135,6 +137,7 @@ All configuration is done through environment variables. Set them in your `.env`
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | *(set by docker-compose)* |
+| `REDIS_URL` | Shared Redis connection for distributed rate limits | `redis://redis:6379/0` |
 | `JWT_SECRET` | Secret key for signing JWTs — **change in production** | *(required)* |
 | `JWT_ISSUER` | Issuer claim in JWTs | `nodebyte` |
 | `ACCESS_TOKEN_EXPIRES_MINUTES` | Access token lifetime | `15` |
@@ -240,6 +243,14 @@ each item in this checklist before the rollout:
 - [ ] **Compose** — use `docker-compose.prod.yml`, which runs Uvicorn without `--reload`
 - [ ] **HTTPS** — terminate TLS with a reverse proxy (nginx, Caddy, Traefik) in front of the containers
 - [ ] **Volumes** — ensure `nodebyte_postgres` is backed up or mapped to persistent storage
+
+Redis stores short-lived rate-limit windows only; it is intentionally not published
+to the host or persisted by the production Compose definition. Keep all backend
+replicas on the same `REDIS_URL` so abuse-control budgets remain global.
+
+Refresh tokens are single-use server-side sessions. Replaying a rotated token revokes
+the entire session family. Invite and registration secrets are shown once at creation;
+only SHA-256 lookup hashes and identifying prefixes are stored afterward.
 
 ## API Documentation
 

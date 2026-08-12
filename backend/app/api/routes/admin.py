@@ -30,6 +30,8 @@ from app.schemas.admin import (
     AdminUserUpdate,
 )
 from app.services.users import get_user_by_email
+from app.services.api_tokens import revoke_all_api_tokens
+from app.services.refresh_sessions import revoke_all_refresh_sessions
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -177,6 +179,10 @@ async def admin_update_user(
         target.full_name = payload.full_name
     if payload.new_password is not None:
         target.password_hash = hash_password(payload.new_password)
+
+    if payload.new_password is not None or payload.is_active is False:
+        await revoke_all_api_tokens(db, user_id=target.id)
+        await revoke_all_refresh_sessions(db, user_id=target.id)
 
     await db.commit()
     target = await _load_user(db, user_id)

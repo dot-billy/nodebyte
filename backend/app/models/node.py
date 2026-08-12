@@ -38,6 +38,16 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active", server_default=text("'active'")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     team: Mapped["Team"] = relationship(back_populates="nodes")
     parent: Mapped["Node | None"] = relationship(
@@ -51,7 +61,17 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         back_populates="parent",
         foreign_keys=[parent_node_id],
     )
+    reviewed_by: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by_id])
+    owner: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
+
+    @property
+    def owner_email(self) -> str | None:
+        return self.owner.email if self.owner else None
+
+    @property
+    def reviewed_by_email(self) -> str | None:
+        return self.reviewed_by.email if self.reviewed_by else None
 
 
 from app.models.team import Team  # noqa: E402
-
+from app.models.user import User  # noqa: E402

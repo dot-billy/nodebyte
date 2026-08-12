@@ -3,12 +3,20 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import uuid
 
-from sqlalchemy import cast, delete as sa_delete, func, or_, select, text
+from sqlalchemy import and_, cast, delete as sa_delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.models.node import Node
-from app.schemas.nodes import IpSegmentCount, NodeLastSeenStats, NodeStats, TagCount
+from app.schemas.nodes import (
+    IpSegmentCount,
+    NodeLastSeenStats,
+    NodeStats,
+    StaleReviewQueue,
+    StaleReviewSummary,
+    TagCount,
+)
 
 
 async def list_nodes(
@@ -21,10 +29,17 @@ async def list_nodes(
     has_url: bool | None = None,
     tags: list[str] | None = None,
     is_orphan: bool | None = None,
+    lifecycle_status: list[str] | None = None,
+    stale_after_days: int | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Node]:
-    stmt = select(Node).where(Node.team_id == team_id).order_by(Node.updated_at.desc())
+    stmt = (
+        select(Node)
+        .options(joinedload(Node.owner), joinedload(Node.reviewed_by))
+        .where(Node.team_id == team_id)
+        .order_by(Node.updated_at.desc())
+    )
     if parent_id is not None:
         stmt = stmt.where(Node.parent_node_id == parent_id)
     if q:
@@ -49,6 +64,11 @@ async def list_nodes(
         stmt = stmt.where(Node.parent_node_id.is_(None))
     elif is_orphan is False:
         stmt = stmt.where(Node.parent_node_id.isnot(None))
+    if lifecycle_status:
+        stmt = stmt.where(Node.lifecycle_status.in_(lifecycle_status))
+    if stale_after_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=stale_after_days)
+        stmt = stmt.where(or_(Node.last_seen_at.is_(None), Node.last_seen_at < cutoff))
     stmt = stmt.limit(limit).offset(offset)
     res = await db.execute(stmt)
     return list(res.scalars().all())
@@ -168,7 +188,12 @@ async def get_node_stats(db: AsyncSession, *, team_id: uuid.UUID, top_tags_limit
 
 
 async def get_node(db: AsyncSession, *, team_id: uuid.UUID, node_id: uuid.UUID) -> Node | None:
-    res = await db.execute(select(Node).where(Node.team_id == team_id).where(Node.id == node_id))
+    res = await db.execute(
+        select(Node)
+        .options(joinedload(Node.owner), joinedload(Node.reviewed_by))
+        .where(Node.team_id == team_id)
+        .where(Node.id == node_id)
+    )
     return res.scalar_one_or_none()
 
 async def validate_parent_node_id(
@@ -265,3 +290,86 @@ async def bulk_update_tags(
     await db.flush()
     return len(nodes)
 
+
+def _stale_condition(cutoff: datetime):
+    return or_(Node.last_seen_at.is_(None), Node.last_seen_at < cutoff)
+
+
+def _review_due_condition(cutoff: datetime):
+    source_timestamp = func.coalesce(Node.last_seen_at, Node.created_at)
+    return or_(
+        Node.reviewed_at.is_(None),
+        Node.reviewed_at < source_timestamp,
+        Node.reviewed_at < cutoff,
+    )
+
+
+async def get_stale_review_queue(
+    db: AsyncSession,
+    *,
+    team_id: uuid.UUID,
+    stale_after_days: int,
+    limit: int = 200,
+) -> StaleReviewQueue:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_after_days)
+    stale = _stale_condition(cutoff)
+    due = _review_due_condition(cutoff)
+
+    pending_stmt = (
+        select(Node)
+        .options(joinedload(Node.owner), joinedload(Node.reviewed_by))
+        .where(Node.team_id == team_id)
+        .where(Node.lifecycle_status == "active")
+        .where(stale)
+        .where(due)
+        .order_by(Node.last_seen_at.asc().nullsfirst(), Node.name.asc())
+        .limit(limit)
+    )
+    pending_nodes = list((await db.execute(pending_stmt)).scalars().unique().all())
+
+    counts = await db.execute(
+        select(
+            func.count(Node.id).filter(
+                and_(Node.lifecycle_status == "active", stale, due)
+            ),
+            func.count(Node.id).filter(and_(Node.lifecycle_status == "ignored", stale)),
+            func.count(Node.id).filter(and_(Node.lifecycle_status == "retired", stale)),
+            func.count(Node.id).filter(stale),
+        ).where(Node.team_id == team_id)
+    )
+    pending, ignored, retired, total_stale = counts.one()
+    return StaleReviewQueue(
+        summary=StaleReviewSummary(
+            stale_after_days=stale_after_days,
+            pending=int(pending or 0),
+            ignored=int(ignored or 0),
+            retired=int(retired or 0),
+            total_stale=int(total_stale or 0),
+        ),
+        nodes=pending_nodes,
+    )
+
+
+async def apply_stale_review_decision(
+    db: AsyncSession,
+    *,
+    team_id: uuid.UUID,
+    node_ids: list[uuid.UUID],
+    lifecycle_status: str,
+    reviewed_by_id: uuid.UUID,
+    owner_user_id: uuid.UUID | None,
+) -> int:
+    values: dict = {
+        "lifecycle_status": lifecycle_status,
+        "reviewed_at": datetime.now(timezone.utc),
+        "reviewed_by_id": reviewed_by_id,
+    }
+    if owner_user_id is not None:
+        values["owner_user_id"] = owner_user_id
+    result = await db.execute(
+        update(Node)
+        .where(Node.team_id == team_id)
+        .where(Node.id.in_(node_ids))
+        .values(**values)
+    )
+    return result.rowcount  # type: ignore[return-value]

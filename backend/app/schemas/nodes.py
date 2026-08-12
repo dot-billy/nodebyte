@@ -46,6 +46,12 @@ class NodePublic(BaseModel):
     notes: str | None
     last_seen_at: datetime | None
     last_seen_source: str | None
+    lifecycle_status: str
+    reviewed_at: datetime | None
+    reviewed_by_id: uuid.UUID | None
+    reviewed_by_email: str | None = None
+    owner_user_id: uuid.UUID | None
+    owner_email: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -70,6 +76,31 @@ class BulkTagRequest(BaseModel):
 
 class BulkActionResponse(BaseModel):
     affected: int
+
+
+class StaleReviewDecision(BaseModel):
+    node_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    lifecycle_status: str
+    owner_user_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _valid_status(self) -> "StaleReviewDecision":
+        if self.lifecycle_status not in {"active", "ignored", "retired"}:
+            raise ValueError("lifecycle_status must be active, ignored, or retired")
+        return self
+
+
+class StaleReviewSummary(BaseModel):
+    stale_after_days: int
+    pending: int
+    ignored: int
+    retired: int
+    total_stale: int
+
+
+class StaleReviewQueue(BaseModel):
+    summary: StaleReviewSummary
+    nodes: list[NodePublic]
 
 
 class TagCount(BaseModel):
@@ -97,4 +128,3 @@ class IpSegmentCount(BaseModel):
     segment: str
     node_count: int
     address_count: int
-

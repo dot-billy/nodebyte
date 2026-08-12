@@ -40,14 +40,14 @@ def create_access_token(*, user_id: uuid.UUID) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
-def create_refresh_token(*, user_id: uuid.UUID) -> str:
+def create_refresh_token(*, user_id: uuid.UUID, session_id: uuid.UUID) -> str:
     now = _now()
     exp = now + timedelta(days=settings.refresh_token_expires_days)
     payload = {
         "iss": settings.jwt_issuer,
         "sub": str(user_id),
         "typ": "refresh",
-        "jti": str(uuid.uuid4()),
+        "jti": str(session_id),
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
     }
@@ -56,4 +56,3 @@ def create_refresh_token(*, user_id: uuid.UUID) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], issuer=settings.jwt_issuer)
-
