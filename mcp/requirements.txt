@@ -1,4 +1,4 @@
 mcp>=1.9,<2
 httpx>=0.28.1,<1
-uvicorn>=0.52.1,<1
+uvicorn>=0.52.2,<1
 starlette>=1.6.0,<2
