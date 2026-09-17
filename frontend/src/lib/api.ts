@@ -9,6 +9,7 @@ export class ApiError extends Error {
 }
 
 let accessToken: string | null = null;
+let refreshRequest: Promise<TokenResponse> | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -321,7 +322,13 @@ export const api = {
       return request<TokenResponse>("/api/auth/login", { method: "POST", body: JSON.stringify(data) });
     },
     refresh() {
-      return request<TokenResponse>("/api/auth/refresh", { method: "POST" });
+      // Strict Mode can bootstrap auth twice. Refresh cookies rotate on use,
+      // so overlapping requests must share a result to avoid replay revocation.
+      if (!refreshRequest) {
+        refreshRequest = request<TokenResponse>("/api/auth/refresh", { method: "POST" })
+          .finally(() => { refreshRequest = null; });
+      }
+      return refreshRequest;
     },
     logout() {
       return request<{ message: string }>("/api/auth/logout", { method: "POST" });
