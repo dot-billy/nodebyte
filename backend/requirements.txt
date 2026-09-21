@@ -15,5 +15,5 @@ argon2-cffi>=25.1.0,<26.0
 
 python-multipart>=0.0.32,<1.0
 
-pytest>=9.0.3,<10.0
+pytest>=9.1.1,<10.0
 httpx>=0.28.1,<0.29.1
