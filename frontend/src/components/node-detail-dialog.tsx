@@ -58,6 +58,33 @@ function formatDate(iso: string) {
   });
 }
 
+function ChildConnectionLink({ value }: { value: string }) {
+  let href: string | null = null;
+  try {
+    const trimmed = value.trim();
+    const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) {
+      href = url.href;
+    }
+  } catch {
+    // Keep values that cannot be opened as web addresses readable.
+  }
+
+  if (!href) return <span className="break-all">{value}</span>;
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex max-w-full items-start gap-1 text-blue-600 hover:underline dark:text-blue-400"
+    >
+      <span className="min-w-0 break-all">{value}</span>
+      <ExternalLink aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
+    </a>
+  );
+}
+
 type IpMetaEntry = {
   interface?: string;
   family?: string;
@@ -487,7 +514,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
               {children.length > 0 && (
                 <Field label={`Children (${children.length})`}>
                   <div className="mt-1 overflow-hidden rounded-md border border-[hsl(var(--border))]">
-                    <table className="w-full text-sm">
+                    <table className="w-full table-fixed text-sm">
                       <tbody>
                         {children.map((c) => (
                           <tr key={c.id} className="border-b border-[hsl(var(--border))] last:border-0">
@@ -500,11 +527,16 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                               </div>
                               {(c.hostname || c.ip) && (
                                 <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                  {c.hostname ?? c.ip}
+                                  {c.hostname ? <ChildConnectionLink value={c.hostname} /> : c.ip}
+                                </div>
+                              )}
+                              {c.url && (
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                  <ChildConnectionLink value={c.url} />
                                 </div>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className="w-20 px-3 py-2 text-right">
                               <Button
                                 type="button"
                                 size="sm"
