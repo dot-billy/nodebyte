@@ -40,6 +40,8 @@ class Node(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    document_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_source: Mapped[str | None] = mapped_column(String(100), nullable=True)

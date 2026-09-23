@@ -53,6 +53,12 @@ The underlying REST list endpoint is `GET /api/teams/{team_id}/nodes`, with
 `parent_id`, `limit`, and `offset` query parameters (along with search filters).
 It requires a personal API token or access token with at least viewer access.
 
+Node create/update tools also accept `document_created_at` and `document_updated_at`
+for a remote document's own dates, as ISO 8601 timestamps with timezone. These are
+independent of the record's automatic `created_at` and `updated_at`. Dates are not
+fetched from remote URLs. Omit them to preserve existing values; use the node editor
+or REST PATCH with `null` to clear them. List/get responses include the dates.
+
 ## Configuration
 
 | Env | Default | Notes |

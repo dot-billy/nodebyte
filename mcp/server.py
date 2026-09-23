@@ -186,6 +186,8 @@ async def add_node(
     team_id: str | None = None,
     upsert: bool = True,
     parent_node_id: str | None = None,
+    document_created_at: str | None = None,
+    document_updated_at: str | None = None,
 ) -> dict:
     """Add a single node (device / site / service) to the inventory.
 
@@ -194,7 +196,8 @@ async def add_node(
     is a list of labels; `meta` is a free-form dict for extra structured data.
     Set `parent_node_id` to an existing node's id in the same team to attach this
     node to it. Use list_nodes to discover parent ids. Omit it to preserve an
-    existing parent during an upsert.
+    existing parent during an upsert. Optional document_created_at/document_updated_at
+    are source document timestamps in ISO 8601 with timezone (e.g. 2026-09-23T12:00:00Z).
 
     When upsert is true (default) and a node with the same hostname already exists in
     the team (or, if no hostname is given, a hostname-less node with the same name),
@@ -204,7 +207,8 @@ async def add_node(
     tid = await _resolve_team(team_id)
     body = _node_body(
         {"name": name, "kind": kind, "hostname": hostname, "ip": ip, "url": url,
-         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id}
+         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id,
+         "document_created_at": document_created_at, "document_updated_at": document_updated_at}
     )
     if upsert:
         existing = await _find_node(tid, hostname, name)
@@ -223,7 +227,7 @@ async def add_nodes(
 
     `nodes` is a list of node objects, each accepting the same fields as add_node
     (name required; optional kind, hostname, ip, url, tags, notes, meta,
-    parent_node_id). Parents must already exist in the same team; use list_nodes
+    parent_node_id, document_created_at, document_updated_at). Parents must already exist in the same team; use list_nodes
     to find their ids. Omitting parent_node_id preserves existing parents. upsert
     applies per node exactly as in add_node. Returns
     {"created": n, "updated": n, "errors": [{"name": ..., "error": ...}]}.
@@ -242,7 +246,9 @@ async def add_nodes(
             {"name": name, "kind": entry.get("kind", "device"), "hostname": hostname,
              "ip": entry.get("ip"), "url": entry.get("url"), "tags": entry.get("tags"),
              "notes": entry.get("notes"), "meta": entry.get("meta"),
-             "parent_node_id": entry.get("parent_node_id")}
+             "parent_node_id": entry.get("parent_node_id"),
+             "document_created_at": entry.get("document_created_at"),
+             "document_updated_at": entry.get("document_updated_at")}
         )
         try:
             existing = await _find_node(tid, hostname, name) if upsert else None
@@ -343,17 +349,22 @@ async def update_node(
     meta: dict | None = None,
     team_id: str | None = None,
     parent_node_id: str | None = None,
+    document_created_at: str | None = None,
+    document_updated_at: str | None = None,
 ) -> dict:
     """Update fields on an existing node by id. Only the fields you pass are changed.
 
     Passing `tags` replaces the whole tag list. Same field meanings as add_node.
     Set `parent_node_id` to attach or move this node to an existing parent in the
     same team. Omitting it (or passing null) preserves the current relationship.
+    document_created_at/document_updated_at accept source timestamps in ISO 8601
+    with timezone. Omitted dates are preserved; use the REST API to clear them.
     """
     tid = await _resolve_team(team_id)
     body = _node_body(
         {"name": name, "kind": kind, "hostname": hostname, "ip": ip, "url": url,
-         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id}
+         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id,
+         "document_created_at": document_created_at, "document_updated_at": document_updated_at}
     )
     return await _req("PATCH", f"/api/teams/{tid}/nodes/{node_id}", json=body)
 
