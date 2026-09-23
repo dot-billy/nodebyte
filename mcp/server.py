@@ -1,6 +1,6 @@
 """Nodebyte MCP server.
 
-A FastMCP streamable-HTTP server that lets Claude add, upload, and search nodes
+A FastMCP streamable-HTTP server that lets clients add, upload, list, and search nodes
 in a Nodebyte digital-inventory instance. It authenticates to the Nodebyte REST
 API with a revocable personal API token, so no user password is stored here.
 
@@ -73,10 +73,18 @@ Adding inventory:
   - add_node/add_nodes upsert by default: if a node with the same hostname (or, when no
     hostname is given, the same name) already exists in the team, it is updated in place
     instead of duplicated. Pass upsert=false to always create a new node.
+  - Set parent_node_id on add_node/add_nodes/update_node to attach a node to an
+    existing parent in the same team. Use list_nodes to find the parent's id first.
+    Omitting parent_node_id leaves an existing relationship unchanged.
 
 Finding inventory:
+  - list_nodes browses a team's inventory without a search term. Results include id
+    and parent_node_id for building relationships. Use parent_id to list a parent's
+    direct children, or is_orphan=true to find nodes without a parent.
+  - list_nodes/search_nodes return one page (limit 1-200, default 50). Increase offset
+    by limit until a page contains fewer than limit results to browse all nodes.
   - search_nodes does a case-insensitive substring match across name, hostname, ip and
-    url at once (the q argument), and can filter by kind/tags/has_url.
+    url at once (the q argument), and can filter by kind/tags/has_url/parent_id.
   - node_stats returns totals plus the kinds and tags currently in use (use it to
     discover which tags/kinds exist before searching or tagging).
 
@@ -177,12 +185,16 @@ async def add_node(
     meta: dict | None = None,
     team_id: str | None = None,
     upsert: bool = True,
+    parent_node_id: str | None = None,
 ) -> dict:
     """Add a single node (device / site / service) to the inventory.
 
     Only `name` is required. `kind` is one of device | site | service | other (free
     text is accepted too). Provide `hostname`, `ip`, and/or `url` when known; `tags`
     is a list of labels; `meta` is a free-form dict for extra structured data.
+    Set `parent_node_id` to an existing node's id in the same team to attach this
+    node to it. Use list_nodes to discover parent ids. Omit it to preserve an
+    existing parent during an upsert.
 
     When upsert is true (default) and a node with the same hostname already exists in
     the team (or, if no hostname is given, a hostname-less node with the same name),
@@ -192,7 +204,7 @@ async def add_node(
     tid = await _resolve_team(team_id)
     body = _node_body(
         {"name": name, "kind": kind, "hostname": hostname, "ip": ip, "url": url,
-         "tags": tags, "notes": notes, "meta": meta}
+         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id}
     )
     if upsert:
         existing = await _find_node(tid, hostname, name)
@@ -210,7 +222,9 @@ async def add_nodes(
     """Bulk-add / upload many nodes at once.
 
     `nodes` is a list of node objects, each accepting the same fields as add_node
-    (name required; optional kind, hostname, ip, url, tags, notes, meta). upsert
+    (name required; optional kind, hostname, ip, url, tags, notes, meta,
+    parent_node_id). Parents must already exist in the same team; use list_nodes
+    to find their ids. Omitting parent_node_id preserves existing parents. upsert
     applies per node exactly as in add_node. Returns
     {"created": n, "updated": n, "errors": [{"name": ..., "error": ...}]}.
     """
@@ -227,7 +241,8 @@ async def add_nodes(
         body = _node_body(
             {"name": name, "kind": entry.get("kind", "device"), "hostname": hostname,
              "ip": entry.get("ip"), "url": entry.get("url"), "tags": entry.get("tags"),
-             "notes": entry.get("notes"), "meta": entry.get("meta")}
+             "notes": entry.get("notes"), "meta": entry.get("meta"),
+             "parent_node_id": entry.get("parent_node_id")}
         )
         try:
             existing = await _find_node(tid, hostname, name) if upsert else None
@@ -243,6 +258,34 @@ async def add_nodes(
 
 
 @mcp.tool()
+async def list_nodes(
+    team_id: str | None = None,
+    parent_id: str | None = None,
+    kind: list[str] | None = None,
+    tags: list[str] | None = None,
+    has_url: bool | None = None,
+    is_orphan: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict]:
+    """List a page of team inventory, including node ids and parent_node_id.
+
+    Use the returned `id` as `parent_node_id` when adding or updating a related
+    node. `parent_id` lists only that parent's direct children; `is_orphan=true`
+    lists nodes without a parent. `kind` matches any listed kind; `tags` requires
+    all listed tags. `has_url` filters whether nodes have a URL.
+
+    Returns newest-updated first. `limit` is 1-200 (default 50); `offset` starts
+    at 0. Increase offset by limit until fewer than limit nodes are returned.
+    Omit team_id to use the configured default or first available team.
+    """
+    return await search_nodes(
+        team_id=team_id, parent_id=parent_id, kind=kind, tags=tags,
+        has_url=has_url, is_orphan=is_orphan, limit=limit, offset=offset,
+    )
+
+
+@mcp.tool()
 async def search_nodes(
     q: str | None = None,
     kind: list[str] | None = None,
@@ -252,13 +295,16 @@ async def search_nodes(
     limit: int = 50,
     offset: int = 0,
     team_id: str | None = None,
+    parent_id: str | None = None,
 ) -> list[dict]:
     """Search the inventory.
 
     `q` is a case-insensitive substring matched across name, hostname, ip and url at
     once. `kind` filters to one or more kinds; `tags` requires the node to carry all
     listed tags; `has_url` / `is_orphan` are boolean filters. limit is 1-200 (default
-    50). Returns matching nodes, newest-updated first.
+    50). `parent_id` filters to a parent's direct children. Returns matching nodes,
+    including id and parent_node_id, newest-updated first. Increase offset by limit
+    to fetch subsequent pages.
     """
     params: dict = {"limit": limit, "offset": offset}
     if q:
@@ -271,6 +317,8 @@ async def search_nodes(
         params["has_url"] = has_url
     if is_orphan is not None:
         params["is_orphan"] = is_orphan
+    if parent_id is not None:
+        params["parent_id"] = parent_id
     tid = await _resolve_team(team_id)
     return await _req("GET", f"/api/teams/{tid}/nodes", params=params)
 
@@ -294,15 +342,18 @@ async def update_node(
     notes: str | None = None,
     meta: dict | None = None,
     team_id: str | None = None,
+    parent_node_id: str | None = None,
 ) -> dict:
     """Update fields on an existing node by id. Only the fields you pass are changed.
 
     Passing `tags` replaces the whole tag list. Same field meanings as add_node.
+    Set `parent_node_id` to attach or move this node to an existing parent in the
+    same team. Omitting it (or passing null) preserves the current relationship.
     """
     tid = await _resolve_team(team_id)
     body = _node_body(
         {"name": name, "kind": kind, "hostname": hostname, "ip": ip, "url": url,
-         "tags": tags, "notes": notes, "meta": meta}
+         "tags": tags, "notes": notes, "meta": meta, "parent_node_id": parent_node_id}
     )
     return await _req("PATCH", f"/api/teams/{tid}/nodes/{node_id}", json=body)
 

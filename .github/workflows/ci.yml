@@ -95,6 +95,9 @@ jobs:
       - name: Compile server
         run: python -m py_compile server.py
 
+      - name: Run MCP tests
+        run: python -m unittest discover -s tests -v
+
       - name: Verify fail-closed configuration
         env:
           NODEBYTE_API_TOKEN: nb_pat_ci_dummy

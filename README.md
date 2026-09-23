@@ -283,7 +283,21 @@ The backend auto-generates interactive API documentation:
 - **Swagger UI** — `http://localhost:8000/docs`
 - **ReDoc** — `http://localhost:8000/redoc`
 
-All endpoints are under `/api/`. Authentication uses JWT bearer tokens with HTTP-only refresh token cookies.
+Documentation is role-filtered: without a token, only public endpoints such as
+`/api/register-node` are shown. At the top of `/docs` or `/redoc`, paste a personal
+API token from **Dashboard → Settings** and select **Load my endpoints**. Access
+tokens also work. The token is held only in memory for that page; **Clear token**
+returns to public documentation. Swagger's **Try it out** uses the entered token.
+
+List inventory with `GET /api/teams/{team_id}/nodes` (at least viewer access).
+Use `GET /api/teams` to find your team ID. The list returns node IDs and
+`parent_node_id`; filter direct children with `parent_id`, and paginate with
+`limit` (1–200) and `offset`. To attach a child, send `parent_node_id` when creating
+or updating a node. Registration tokens are for registration, not listing inventory.
+
+All endpoints are under `/api/`. Authentication accepts personal API tokens or JWT
+access tokens as bearer credentials. Browser refresh tokens use HTTP-only cookies.
+Interactive documentation is disabled in production.
 
 ## Project Structure
 
