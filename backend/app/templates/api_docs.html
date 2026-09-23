@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nodebyte API – Docs</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; color: #172033; }
+    header { padding: 20px 24px; border-bottom: 1px solid #d4d9e2; background: #f8fafc; }
+    header h1 { margin: 0 0 8px; font-size: 22px; }
+    header p { margin: 8px 0; }
+    form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, button { padding: 9px 12px; font: inherit; }
+    input { flex: 1; min-width: 180px; max-width: 520px; }
+    button { cursor: pointer; }
+    #status { min-height: 24px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Nodebyte API</h1>
+    <p>Enter a personal API token from Dashboard → Settings to show your available endpoints,
+      including <code>GET /api/teams/{team_id}/nodes</code>. Access tokens also work.</p>
+    <form id="docs-auth">
+      <label for="docs-token">API token</label>
+      <input id="docs-token" type="password" autocomplete="off" spellcheck="false"
+        placeholder="Paste your token">
+      <button type="submit">Load my endpoints</button>
+      <button id="clear-token" type="button">Clear token</button>
+    </form>
+    <p>Without a token, only public endpoints are shown. Registration tokens cannot list nodes.
+      Your token is kept only for this page session.</p>
+    <p id="status" role="status" aria-live="polite"></p>
+  </header>
+  <div id="api-docs"></div>
+  <script>
+    (() => {
+      const renderer = "__RENDERER__";
+      const form = document.getElementById("docs-auth");
+      const input = document.getElementById("docs-token");
+      const status = document.getElementById("status");
+      const container = document.getElementById("api-docs");
+      let token = "";
+
+      const library = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = renderer === "redoc"
+          ? "https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"
+          : "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js";
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("Could not load the documentation viewer. Reload to retry."));
+        document.head.appendChild(script);
+      });
+
+      async function loadSchema(nextToken) {
+        token = "";
+        container.replaceChildren();
+        for (const control of form.elements) control.disabled = true;
+        status.textContent = "Loading endpoints…";
+        try {
+          const [response] = await Promise.all([
+            fetch("/openapi.json", {
+              headers: nextToken ? { Authorization: `Bearer ${nextToken}` } : {},
+              cache: "no-store",
+            }),
+            library,
+          ]);
+          if (response.status === 401) throw new Error("Token is invalid or expired. Use a personal API token from Dashboard → Settings.");
+          if (!response.ok) throw new Error("Could not load endpoints. Please retry.");
+          const schema = await response.json();
+          token = nextToken;
+          if (renderer === "redoc") {
+            Redoc.init(schema, {}, container);
+          } else {
+            SwaggerUIBundle({
+              spec: schema,
+              dom_id: "#api-docs",
+              deepLinking: true,
+              requestInterceptor: (request) => {
+                if (token && new URL(request.url, location.href).origin === location.origin) {
+                  request.headers = request.headers || {};
+                  request.headers.Authorization = `Bearer ${token}`;
+                }
+                return request;
+              },
+            });
+          }
+          status.textContent = token
+            ? "Showing endpoints for your account. Team endpoints require team membership."
+            : "Showing public endpoints. Enter a token to see your team and node endpoints.";
+        } catch (error) {
+          token = "";
+          status.textContent = error.message;
+        } finally {
+          for (const control of form.elements) control.disabled = false;
+        }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const nextToken = input.value.trim().replace(/^Bearer\s+/i, "");
+        input.value = "";
+        loadSchema(nextToken);
+      });
+      document.getElementById("clear-token").addEventListener("click", () => {
+        input.value = "";
+        loadSchema("");
+      });
+      loadSchema("");
+    })();
+  </script>
+</body>
+</html>

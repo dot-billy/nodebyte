@@ -9,16 +9,14 @@ team routes are hidden from viewers; etc.
 from __future__ import annotations
 
 import re
-import uuid
 from typing import Any
 
-from jwt import InvalidTokenError
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import decode_token
+from app.api.deps import get_current_user
 from app.models.membership import Membership
-from app.models.user import User
 
 VISIBILITY_LEVELS = {
     "public": 0,
@@ -95,27 +93,22 @@ async def resolve_caller_level(
     authorization: str | None,
     db: AsyncSession,
 ) -> int:
-    if not authorization or not authorization.startswith("Bearer "):
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
         return VISIBILITY_LEVELS["public"]
 
-    token = authorization.removeprefix("Bearer ").strip()
     try:
-        payload = decode_token(token)
-        if payload.get("typ") != "access":
-            return VISIBILITY_LEVELS["public"]
-        user_id = uuid.UUID(payload["sub"])
-    except (InvalidTokenError, KeyError, ValueError):
-        return VISIBILITY_LEVELS["public"]
-
-    user = await db.get(User, user_id)
-    if not user or not user.is_active:
+        user = await get_current_user(db=db, token=token.strip())
+    except HTTPException as exc:
+        if exc.status_code != 401:
+            raise
         return VISIBILITY_LEVELS["public"]
 
     if user.is_superuser:
         return VISIBILITY_LEVELS["superuser"]
 
     result = await db.execute(
-        select(Membership.role).where(Membership.user_id == user_id)
+        select(Membership.role).where(Membership.user_id == user.id)
     )
     roles = [r for (r,) in result.all()]
     if not roles:

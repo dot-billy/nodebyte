@@ -1,8 +1,8 @@
 # nodebyte-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
-[Nodebyte](../README.md). It lets an MCP client (e.g. Claude) add, upload, and
-search nodes in a Nodebyte instance over the REST API.
+[Nodebyte](../README.md). It lets an MCP client (e.g. Claude) add, upload,
+list and search nodes in a Nodebyte instance over the REST API.
 
 It is a single-file [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
 server exposed over **streamable HTTP** on `127.0.0.1:8080` at `/mcp`. It
@@ -19,12 +19,39 @@ the `Host` header must match `MCP_ALLOWED_HOSTS`.
 |------|---------|
 | `add_node` | Add one device/site/service (idempotent upsert by hostname/name) |
 | `add_nodes` | Bulk-add / upload many nodes at once |
+| `list_nodes` | Paginated team inventory with node IDs; filter by parent, kind, tags, URL, or orphan status |
 | `search_nodes` | Substring search across name/hostname/ip/url, filter by kind/tags |
 | `get_node` | Fetch a node by id |
 | `update_node` | Patch fields on a node |
 | `delete_node` | Delete a node |
 | `node_stats` | Totals + kinds/tags currently in use |
 | `list_teams` | List the service account's teams |
+
+## Adding related nodes
+
+1. Call `list_nodes(team_id="<team-id>", kind=["device"])` to find the parent.
+   Results include each node's `id` and `parent_node_id`. Listing returns up to
+   `limit` nodes (default 50, maximum 200); increase `offset` by `limit` until
+   a page contains fewer than `limit` nodes.
+2. Call `add_node(name="Application VM", parent_node_id="<parent-id>",
+   team_id="<team-id>")` to create or upsert a child under that parent.
+3. Call `list_nodes(parent_id="<parent-id>", team_id="<team-id>")` to list
+   its direct children. `search_nodes` also accepts `parent_id`.
+
+Each object in `add_nodes` can include `parent_node_id`, and `update_node` accepts
+it to attach or move an existing node. The parent must already exist in the same
+team. The REST API enforces team permissions and rejects invalid parents and
+cycles. Omitting `parent_node_id` (or passing null) preserves an existing parent
+during updates and upserts. To remove a parent, use the REST PATCH endpoint with
+`{"parent_node_id": null}`.
+
+Use `is_orphan=true` to list nodes without parents. Both list and search results
+are ordered by most recently updated first. All node tools accept an optional `team_id`;
+when omitted, the configured default or first available team is used.
+
+The underlying REST list endpoint is `GET /api/teams/{team_id}/nodes`, with
+`parent_id`, `limit`, and `offset` query parameters (along with search filters).
+It requires a personal API token or access token with at least viewer access.
 
 ## Configuration
 

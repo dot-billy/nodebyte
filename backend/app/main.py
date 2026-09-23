@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, Request
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.openapi_filter import filter_openapi_schema, resolve_caller_level
+from app.core.openapi_filter import VISIBILITY_LEVELS, filter_openapi_schema, resolve_caller_level
 from app.db.session import get_db
 
 
@@ -69,7 +71,7 @@ def create_app() -> FastAPI:
         async def openapi_filtered(
             request: Request,
             db: AsyncSession = Depends(get_db),
-        ) -> dict:
+        ) -> JSONResponse:
             nonlocal _full_schema
             if _full_schema is None:
                 _full_schema = get_openapi(
@@ -81,21 +83,22 @@ def create_app() -> FastAPI:
                 request.headers.get("authorization"),
                 db,
             )
-            return filter_openapi_schema(_full_schema, level)
+            if request.headers.get("authorization") and level == VISIBILITY_LEVELS["public"]:
+                raise HTTPException(status_code=401, detail="Invalid or expired docs token")
+            return JSONResponse(
+                filter_openapi_schema(_full_schema, level),
+                headers={"Cache-Control": "private, no-store", "Vary": "Authorization"},
+            )
+
+        docs_template = (Path(__file__).parent / "templates" / "api_docs.html").read_text()
 
         @app.get("/docs", include_in_schema=False)
-        async def docs() -> str:
-            return get_swagger_ui_html(
-                openapi_url="/openapi.json",
-                title=f"{app.title} – Docs",
-            )
+        async def docs() -> HTMLResponse:
+            return HTMLResponse(docs_template.replace("__RENDERER__", "swagger"))
 
         @app.get("/redoc", include_in_schema=False)
-        async def redoc() -> str:
-            return get_redoc_html(
-                openapi_url="/openapi.json",
-                title=f"{app.title} – ReDoc",
-            )
+        async def redoc() -> HTMLResponse:
+            return HTMLResponse(docs_template.replace("__RENDERER__", "redoc"))
 
     return app
 

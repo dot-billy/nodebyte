@@ -65,7 +65,7 @@ async def nodes_stats(
     return await get_node_stats(db, team_id=team_id)
 
 
-@router.get("", response_model=list[NodePublic])
+@router.get("", response_model=list[NodePublic], summary="List nodes")
 async def nodes_list(
     team_id: uuid.UUID,
     q: str | None = None,
@@ -81,6 +81,13 @@ async def nodes_list(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Node]:
+    """List team nodes, including IDs for creating parent/child relationships.
+
+    Requires a personal API token or access token with at least viewer access to
+    the team. Use `parent_id` to list direct children, or `is_orphan=true` to find
+    nodes without a parent. Pass a returned node's `id` as `parent_node_id` when
+    creating or updating a child. Results are paginated with `limit` and `offset`.
+    """
     await require_role(db, user=user, team_id=team_id, min_role="viewer")
     return await list_nodes(
         db, team_id=team_id, q=q, parent_id=parent_id,
