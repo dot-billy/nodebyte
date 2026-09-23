@@ -22,6 +22,7 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 - **Import reconciliation** — preview authoritative Docker, Kubernetes, and LXD changes before applying, with explicit missing-node retirement
 - **Automation health** — see source freshness, failures, summaries, and sync-run history
 - **Audit history** — inspect append-only human and automation changes with before/after context
+- **Child inventory tables** — open a parent to browse child descriptions, links, tags, and dates; sort by name, tags, date added/updated, or remote document dates
 - **Invite system** — invite team members by email with role-based access
 - **Super admin console** — platform-wide user and team management for superusers
 
@@ -191,6 +192,34 @@ This creates `frontend/public/downloads/extension.tar.gz` and an `extension-meta
 4. Click the Nodebyte icon in your toolbar, open **Settings**, and set your API URL
 
 The extension connects directly to the backend API (e.g. `http://localhost:8000`).
+
+## Child tables and document dates
+
+Click a parent node's name to see its children in a sortable table. The description
+uses each child's **Description / notes** field. Click a column header to change
+sort direction, filter by tag, open a child by name, or edit it directly. All child
+pages are loaded; the table is not limited to the first 200 children. Tags sort by
+each node's alphabetized tag list, with untagged nodes last. Unknown document dates
+also appear last in either sort direction.
+
+**Date added** (`created_at`) and **Date updated** (`updated_at`) are automatically
+tracked for the NodeByte record. Automation and inventory updates may change the
+record's updated date. They do not indicate when a linked remote document changed.
+
+Use the optional **Document created** and **Document updated** fields in the node
+editor to record the remote document's own dates. Entries and displayed times use
+your local timezone. These dates are supplied manually or by an integration; opening
+a URL does not fetch them automatically. Existing records start with unknown document
+dates, and editing other fields does not change them.
+
+The team node POST/PATCH API accepts `document_created_at` and `document_updated_at`
+as ISO 8601 timestamps with a timezone, for example `2026-09-23T09:15:00-04:00`.
+GET responses include both fields. Omit a date on PATCH to preserve it; send `null`
+to clear it. MCP `add_node`, `add_nodes`, and `update_node` also accept these dates
+(use the REST API or editor to clear them).
+
+Apply migration `0008_document_dates` before running the updated backend:
+`docker compose exec backend alembic upgrade head`.
 
 ## Authoritative inventory sync
 

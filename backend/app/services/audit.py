@@ -32,6 +32,8 @@ def node_snapshot(node: Node) -> dict:
         "tags": node.tags,
         "meta": node.meta,
         "notes": node.notes,
+        "document_created_at": node.document_created_at,
+        "document_updated_at": node.document_updated_at,
         "parent_node_id": node.parent_node_id,
         "inventory_source_id": node.inventory_source_id,
         "external_id": node.external_id,

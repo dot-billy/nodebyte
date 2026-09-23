@@ -7,12 +7,15 @@ import { copyToClipboard } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { NodeChildrenTable, NodeDate } from "@/components/node-children-table";
+import { loadAllNodePages } from "@/lib/node-table";
 
 interface NodeDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   node: NodePublic | null;
   onEdit: (node: NodePublic) => void;
+  onView: (node: NodePublic) => void;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -56,33 +59,6 @@ function formatDate(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function ChildConnectionLink({ value }: { value: string }) {
-  let href: string | null = null;
-  try {
-    const trimmed = value.trim();
-    const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
-    if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) {
-      href = url.href;
-    }
-  } catch {
-    // Keep values that cannot be opened as web addresses readable.
-  }
-
-  if (!href) return <span className="break-all">{value}</span>;
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex max-w-full items-start gap-1 text-blue-600 hover:underline dark:text-blue-400"
-    >
-      <span className="min-w-0 break-all">{value}</span>
-      <ExternalLink aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
-    </a>
-  );
 }
 
 type IpMetaEntry = {
@@ -359,10 +335,12 @@ const kindColors: Record<string, string> = {
   other: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
 };
 
-export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetailDialogProps) {
+export function NodeDetailDialog({ open, onOpenChange, node, onEdit, onView }: NodeDetailDialogProps) {
   const [parentNode, setParentNode] = useState<NodePublic | null>(null);
   const [children, setChildren] = useState<NodePublic[]>([]);
   const [relLoading, setRelLoading] = useState(false);
+  const [relError, setRelError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -370,18 +348,21 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
     async function loadRelations() {
       if (!open || !node) return;
       setRelLoading(true);
+      setRelError(false);
       setParentNode(null);
       setChildren([]);
 
       try {
         const [parentRes, childrenRes] = await Promise.all([
           node.parent_node_id ? api.nodes.get(node.team_id, node.parent_node_id).catch(() => null) : Promise.resolve(null),
-          api.nodes.list(node.team_id, { parent_id: node.id, limit: 200 }).catch(() => []),
+          loadAllNodePages((page) => api.nodes.list(node.team_id, { ...page, parent_id: node.id }), () => cancelled),
         ]);
 
         if (cancelled) return;
         setParentNode(parentRes);
         setChildren(childrenRes);
+      } catch {
+        if (!cancelled) setRelError(true);
       } finally {
         if (!cancelled) setRelLoading(false);
       }
@@ -389,7 +370,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
 
     loadRelations();
     return () => { cancelled = true; };
-  }, [open, node]);
+  }, [open, node, retry]);
 
   if (!open || !node) return null;
 
@@ -402,7 +383,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={() => onOpenChange(false)} />
 
-      <div className="relative z-50 mx-4 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-lg">
+      <div role="dialog" aria-modal="true" aria-label={`${node.name} details`} className="relative z-50 mx-4 w-full max-w-7xl max-h-[85vh] overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-lg">
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--background))] p-5">
           <div className="min-w-0">
@@ -422,6 +403,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
             </Button>
             <button
               onClick={() => onOpenChange(false)}
+              aria-label="Close details"
               className="rounded-md p-1.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -481,7 +463,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
           )}
 
           {/* Relationships */}
-          {(relLoading || node.parent_node_id || parentHint || children.length > 0) && (
+          {(
             <div className="rounded-lg border border-[hsl(var(--border))] p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
@@ -494,7 +476,7 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                 <Field label="Parent">
                   {parentNode ? (
                     <div className="space-y-0.5">
-                      <div className="text-sm font-medium">{parentNode.name}</div>
+                      <button type="button" className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400" onClick={() => onView(parentNode)}>{parentNode.name}</button>
                       <div className="text-xs text-[hsl(var(--muted-foreground))]">
                         {parentNode.hostname ?? parentNode.ip ?? parentNode.id}
                       </div>
@@ -511,50 +493,13 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                 </Field>
               )}
 
-              {children.length > 0 && (
-                <Field label={`Children (${children.length})`}>
-                  <div className="mt-1 overflow-hidden rounded-md border border-[hsl(var(--border))]">
-                    <table className="w-full table-fixed text-sm">
-                      <tbody>
-                        {children.map((c) => (
-                          <tr key={c.id} className="border-b border-[hsl(var(--border))] last:border-0">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{c.name}</span>
-                                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${kindColors[c.kind] ?? kindColors.other}`}>
-                                  {c.kind}
-                                </span>
-                              </div>
-                              {(c.hostname || c.ip) && (
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                  {c.hostname ? <ChildConnectionLink value={c.hostname} /> : c.ip}
-                                </div>
-                              )}
-                              {c.url && (
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                  <ChildConnectionLink value={c.url} />
-                                </div>
-                              )}
-                            </td>
-                            <td className="w-20 px-3 py-2 text-right">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  onOpenChange(false);
-                                  onEdit(c);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Field>
+              {relError ? (
+                <div role="alert" className="flex items-center gap-3 text-sm">
+                  Could not load children.
+                  <Button type="button" size="sm" variant="outline" onClick={() => setRetry((value) => value + 1)}>Retry</Button>
+                </div>
+              ) : !relLoading && (
+                <NodeChildrenTable key={node.id} nodes={children} onView={onView} onEdit={(child) => { onOpenChange(false); onEdit(child); }} />
               )}
             </div>
           )}
@@ -575,6 +520,13 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit }: NodeDetai
                 </table>
               </div>
             </Field>
+          )}
+
+          {(node.document_created_at || node.document_updated_at) && (
+            <div className="grid grid-cols-2 gap-4 rounded-lg border border-[hsl(var(--border))] p-4 text-sm">
+              <Field label="Document created"><NodeDate value={node.document_created_at} /></Field>
+              <Field label="Document updated"><NodeDate value={node.document_updated_at} /></Field>
+            </div>
           )}
 
           {/* Timestamps */}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { documentDatePayload, toLocalDateInput } from "@/lib/node-table";
 
 interface NodeDialogProps {
   open: boolean;
@@ -28,6 +29,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
   const [url, setUrl] = useState("");
   const [tags, setTags] = useState("");
   const [notes, setNotes] = useState("");
+  const [documentCreated, setDocumentCreated] = useState("");
+  const [documentUpdated, setDocumentUpdated] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -52,6 +55,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       setNotes("");
     }
     setError("");
+    setDocumentCreated(toLocalDateInput(node?.document_created_at));
+    setDocumentUpdated(toLocalDateInput(node?.document_updated_at));
   }, [node, open]);
 
   useEffect(() => {
@@ -91,6 +96,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       url: url || null,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
       notes: notes || null,
+      document_created_at: documentDatePayload(documentCreated, node?.document_created_at),
+      document_updated_at: documentDatePayload(documentUpdated, node?.document_updated_at),
     };
 
     try {
@@ -201,16 +208,29 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="nd-notes">Notes</Label>
+            <Label htmlFor="nd-notes">Description / notes</Label>
             <textarea
               id="nd-notes"
               rows={3}
               className="flex w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-sm placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] resize-none"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes about this node..."
+              placeholder="Describe this node or linked document..."
             />
           </div>
+
+          <fieldset className="space-y-3 rounded-lg border border-[hsl(var(--border))] p-3">
+            <legend className="px-1 text-sm font-medium">Remote document dates</legend>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Optional dates from the linked document, entered in your local timezone. NodeByte tracks its own added/updated dates separately.</p>
+            <div className="space-y-2">
+              <Label htmlFor="nd-document-created">Document created</Label>
+              <Input id="nd-document-created" type="datetime-local" step="0.001" value={documentCreated} onChange={(event) => setDocumentCreated(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nd-document-updated">Document updated</Label>
+              <Input id="nd-document-updated" type="datetime-local" step="0.001" value={documentUpdated} onChange={(event) => setDocumentUpdated(event.target.value)} />
+            </div>
+          </fieldset>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

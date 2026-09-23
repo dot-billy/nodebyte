@@ -100,6 +100,20 @@ class NodeToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.requests[0].url.params["q"], "database")
         self.assertEqual(self.requests[0].url.params["parent_id"], "parent-id")
 
+    async def test_document_dates_are_forwarded_by_create_update_and_bulk_tools(self):
+        dates = {"document_created_at": "2020-01-01T12:00:00Z", "document_updated_at": "2026-09-23T12:00:00-04:00"}
+        for name, arguments in (
+            ("add_node", {"name": "Runbook", "upsert": False, **dates}),
+            ("update_node", {"node_id": "doc-id", **dates}),
+            ("add_nodes", {"nodes": [{"name": "Runbook", **dates}], "upsert": False}),
+        ):
+            with self.subTest(tool=name):
+                self.responses = [(200, {"id": "doc-id", **dates})]
+                await self.call(name, **arguments)
+                body = json.loads(self.requests[-1].content)
+                for key, value in dates.items():
+                    self.assertEqual(body[key], value)
+
     async def test_add_attaches_parent_on_create_and_upsert(self):
         for upsert in (False, True):
             with self.subTest(upsert=upsert):

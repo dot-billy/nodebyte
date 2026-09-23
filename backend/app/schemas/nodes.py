@@ -3,10 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 class NodeCreate(BaseModel):
+    document_created_at: AwareDatetime | None = Field(default=None, description="Remote document creation time, including timezone; supplied manually or by an integration.")
+    document_updated_at: AwareDatetime | None = Field(default=None, description="Remote document modification time, including timezone; independent of NodeByte updates.")
     kind: str = Field(default="device", max_length=30)
     name: str = Field(min_length=1, max_length=200)
     hostname: str | None = Field(default=None, max_length=255)
@@ -20,6 +22,8 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
+    document_created_at: AwareDatetime | None = None
+    document_updated_at: AwareDatetime | None = None
     kind: str | None = Field(default=None, max_length=30)
     name: str | None = Field(default=None, max_length=200)
     hostname: str | None = Field(default=None, max_length=255)
@@ -35,6 +39,8 @@ class NodeUpdate(BaseModel):
 
 
 class NodePublic(BaseModel):
+    document_created_at: datetime | None = None
+    document_updated_at: datetime | None = None
     id: uuid.UUID
     team_id: uuid.UUID
     parent_node_id: uuid.UUID | None

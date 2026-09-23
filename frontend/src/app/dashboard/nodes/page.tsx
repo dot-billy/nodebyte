@@ -512,6 +512,7 @@ export default function NodesPage() {
         open={!!viewing}
         onOpenChange={(open) => { if (!open) setViewing(null); }}
         node={viewing}
+        onView={setViewing}
         onEdit={(node) => { setViewing(null); openEdit(node); }}
       />
 

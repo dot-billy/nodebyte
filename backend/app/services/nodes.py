@@ -38,7 +38,7 @@ async def list_nodes(
         select(Node)
         .options(joinedload(Node.owner), joinedload(Node.reviewed_by))
         .where(Node.team_id == team_id)
-        .order_by(Node.updated_at.desc())
+        .order_by(Node.updated_at.desc(), Node.id.asc())
     )
     if parent_id is not None:
         stmt = stmt.where(Node.parent_node_id == parent_id)

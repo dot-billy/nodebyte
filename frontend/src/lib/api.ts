@@ -136,6 +136,8 @@ export interface RegistrationTokenCreated extends RegistrationTokenPublic {
 }
 
 export interface NodePublic {
+  document_created_at: string | null;
+  document_updated_at: string | null;
   id: string;
   team_id: string;
   parent_node_id: string | null;
