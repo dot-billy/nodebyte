@@ -22,7 +22,7 @@
     "tailwind-merge": "latest"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.6",
+    "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",
