@@ -76,6 +76,9 @@ def test_schema_accepts_both_token_types_and_preserves_role_filtering(
     assert paths[NODES_PATH]["get"]["summary"] == "List nodes"
     assert "parent_id" in {p["name"] for p in paths[NODES_PATH]["get"]["parameters"]}
     assert ("post" in paths[NODES_PATH]) == (role != "viewer")
+    collections = paths["/api/teams/{team_id}/collections"]
+    assert "get" in collections
+    assert ("post" in collections) == (role != "viewer")
     assert not any(path.startswith("/api/admin") for path in paths)
     # The full schema cache must never cause authenticated paths to leak later.
     assert NODES_PATH not in client.get("/openapi.json").json()["paths"]

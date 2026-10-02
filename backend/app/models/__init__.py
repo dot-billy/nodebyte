@@ -5,6 +5,7 @@ from app.models.inventory_sync_run import InventorySyncRun
 from app.models.invite import Invite
 from app.models.membership import Membership
 from app.models.node import Node
+from app.models.collection import Collection, CollectionNode, NodeLink
 from app.models.refresh_session import RefreshSession
 from app.models.registration_token import RegistrationToken
 from app.models.team import Team
@@ -15,6 +16,9 @@ __all__ = [
     "Team",
     "Membership",
     "Node",
+    "Collection",
+    "CollectionNode",
+    "NodeLink",
     "Invite",
     "RegistrationToken",
     "ApiToken",

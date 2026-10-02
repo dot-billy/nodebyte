@@ -13,6 +13,18 @@ concurrency:
 jobs:
   backend-check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: backend/
@@ -40,6 +52,7 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: postgresql+asyncpg://ci:ci@localhost/ci
+          TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost/ci
           JWT_SECRET: ci-dummy
         run: python -m pytest tests/ -v --tb=short
 

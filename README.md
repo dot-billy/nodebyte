@@ -1,6 +1,6 @@
 # Nodebyte
 
-A modern digital inventory manager built for IT teams. Track every device, site, and service your team depends on. Search by name, tag, host, IP, or URL. Automate via REST API. Keep your operational knowledge tidy.
+A digital inventory and knowledge library for individuals and teams. Track devices, sites, and services alongside documents, reference links, and channel directories. Connect related resources and organize them in optional collections.
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
@@ -11,6 +11,10 @@ A modern digital inventory manager built for IT teams. Track every device, site,
 ## Features
 
 - **Fast search** — find any node instantly by name, hostname, IP, URL, or tags
+- **Knowledge library** — curate document, link, and channel records with a summary, separate notes, source labels, tags, and source dates
+- **Flexible collections** — group resources around a home lab, project, environment, or customer; one resource can belong to several collections or none
+- **Related resources** — connect systems to runbooks, design documents, and channels with links visible from either resource
+- **Shared search** — search saved summaries, notes, tags, source labels, and inventory fields across the active team
 - **Multi-tenant teams** — create teams with roles (owner, admin, member, viewer) and switch context in one click
 - **REST API** — automate node registration from deploy scripts, monitoring, or CI/CD pipelines
 - **Registration tokens** — let servers and agents self-register as nodes without user credentials
@@ -161,6 +165,7 @@ All configuration is done through environment variables. Set them in your `.env`
 | `NODE_ENV` | Set to `production` for optimized builds (`next build` + `next start`) | `development` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend API URL (used client-side) | `http://localhost:8000` |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Turnstile site key (use test key for dev) | *(test key)* |
+| `API_PROXY_TARGET` | Server-side API proxy origin when running Next.js outside Compose; set before building and starting Next.js | `http://backend:8000` |
 | `NEXT_PUBLIC_EDITION` | Landing page variant: `cloud` (marketing) or `oss` (minimal) | `cloud` |
 
 ### Docker Compose
@@ -220,6 +225,68 @@ to clear it. MCP `add_node`, `add_nodes`, and `update_node` also accept these da
 
 Apply migration `0008_document_dates` before running the updated backend:
 `docker compose exec backend alembic upgrade head`.
+
+## Knowledge and collections
+
+Use **Inventory**, **Knowledge**, and **Collections** in the dashboard sidebar.
+Inventory's **Table view** keeps the existing bulk actions and infrastructure
+details available. The search field above these pages searches across the active
+team's resources, including summaries and notes.
+
+Choose **Add resource** to save a document, reference link, channel directory
+entry, or system. Summaries are manually curated and stored separately from notes.
+The optional source label (for example, Google Docs or Slack) identifies where a
+resource comes from; it does not create an integration. Original links are opened
+only for HTTP(S) URLs without embedded credentials.
+
+Source creation and modification dates are entered manually in the user's local
+timezone. Unknown dates remain unknown. These fields are independent of the
+automatically maintained NodeByte record dates. This release does not fetch
+remote content, synchronize metadata, generate AI summaries, or search Slack
+messages. Search covers information saved in NodeByte.
+
+Create a collection with a name and optional description, then use **Add existing**
+or **Add resource** inside it. The details panel lets you add a resource to more
+collections and link related resources. Links work in both directions. Removing
+a resource from a collection or deleting the collection preserves the resource.
+Deleting a resource removes its collection memberships and related-resource links,
+and never deletes the original external document.
+
+Collections are organizational, not permission boundaries. Viewers can read;
+members, admins, and owners can curate. Saved summaries and notes are visible to
+the NodeByte team; access to the original document remains controlled by its source.
+No customer, project, collection, or related inventory record is required to save
+a knowledge resource. Knowledge kinds (`document`, `channel`, `link`) are excluded
+from the infrastructure stale-review queue.
+
+Apply migration `0009_knowledge_collections` before starting the updated backend:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+The existing node API now accepts `summary` and `source_name` on POST/PATCH.
+Omit fields on PATCH to preserve their values; send `null` to clear them.
+`GET /api/teams/{team_id}/nodes` accepts `scope=inventory|knowledge` and
+`collection_id`; omitting `scope` retains the original all-resource behavior.
+
+Collection and link endpoints follow the same team RBAC as nodes:
+
+- `GET/POST /api/teams/{team_id}/collections`
+- `GET/PUT/DELETE /api/teams/{team_id}/collections/{collection_id}`
+- `PUT/DELETE /api/teams/{team_id}/collections/{collection_id}/nodes/{node_id}`
+- `GET /api/teams/{team_id}/nodes/{node_id}/links`
+- `PUT/DELETE /api/teams/{team_id}/nodes/{node_id}/links/{related_id}`
+
+Collection listing accepts `node_id` to find a resource's collections. Collection,
+node, and related-resource lists support `limit` (1–200) and `offset`. Membership
+and link PUTs are idempotent, and self-links and cross-team associations are rejected.
+Collection updates use PUT with the full name and description. Changes appear in
+the existing activity log.
+
+Database integration checks run with `TEST_DATABASE_URL` pointing to a disposable
+PostgreSQL database. Each test creates and removes its own schema. CI runs these
+checks alongside the existing suite.
 
 ## Authoritative inventory sync
 

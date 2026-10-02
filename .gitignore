@@ -9,7 +9,7 @@ __pycache__/
 backend/.venv/
 
 # Node / Next.js
-frontend/node_modules/
+frontend/node_modules
 frontend/.next/
 
 # Build artifacts
@@ -29,3 +29,5 @@ Thumbs.db
 # Logs
 *.log
 tmp/
+.preview/
+frontend/*.tsbuildinfo

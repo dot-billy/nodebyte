@@ -7,6 +7,8 @@ from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 class NodeCreate(BaseModel):
+    summary: str | None = Field(default=None, max_length=20000)
+    source_name: str | None = Field(default=None, max_length=120)
     document_created_at: AwareDatetime | None = Field(default=None, description="Remote document creation time, including timezone; supplied manually or by an integration.")
     document_updated_at: AwareDatetime | None = Field(default=None, description="Remote document modification time, including timezone; independent of NodeByte updates.")
     kind: str = Field(default="device", max_length=30)
@@ -22,6 +24,8 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
+    summary: str | None = Field(default=None, max_length=20000)
+    source_name: str | None = Field(default=None, max_length=120)
     document_created_at: AwareDatetime | None = None
     document_updated_at: AwareDatetime | None = None
     kind: str | None = Field(default=None, max_length=30)
@@ -39,6 +43,8 @@ class NodeUpdate(BaseModel):
 
 
 class NodePublic(BaseModel):
+    summary: str | None = None
+    source_name: str | None = None
     document_created_at: datetime | None = None
     document_updated_at: datetime | None = None
     id: uuid.UUID

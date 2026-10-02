@@ -21,6 +21,9 @@ import {
   Archive,
   ScrollText,
   RadioTower,
+  BookOpen,
+  Folders,
+  Search,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
@@ -30,7 +33,9 @@ import { CreateTeamDialog } from "@/components/create-team-dialog";
 
 const NAV_ITEMS: readonly { href: string; label: string; icon: typeof LayoutDashboard; exact?: boolean; muted?: boolean }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/dashboard/nodes", label: "Nodes", icon: Server, exact: true },
+  { href: "/dashboard/inventory", label: "Inventory", icon: Server },
+  { href: "/dashboard/knowledge", label: "Knowledge", icon: BookOpen },
+  { href: "/dashboard/collections", label: "Collections", icon: Folders },
   { href: "/dashboard/nodes/review", label: "Stale review", icon: Archive },
   { href: "/dashboard/automation", label: "Automation", icon: RadioTower },
   { href: "/dashboard/activity", label: "Activity", icon: ScrollText },
@@ -50,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, teams, activeTeam, setActiveTeam, reloadTeams, logout, loading } = useAuth();
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [workspaceSearch, setWorkspaceSearch] = useState("");
   const router = useRouter();
   const pathname = usePathname();
 
@@ -184,7 +190,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile header */}
         <header className="flex h-14 items-center gap-3 border-b border-[hsl(var(--border))] px-4 md:hidden">
           <button
@@ -197,6 +203,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex-1" />
           <span className="hidden text-xs text-[hsl(var(--muted-foreground))] sm:inline">{user.email}</span>
         </header>
+        <form className="flex items-center gap-3 border-b border-[hsl(var(--border))] px-4 py-3 sm:px-6" onSubmit={event => { event.preventDefault(); router.push(`/dashboard/search?q=${encodeURIComponent(workspaceSearch.trim())}`); }}>
+          <Search className="h-4 w-4 shrink-0 text-[hsl(var(--muted-foreground))]" />
+          <input aria-label="Search all resources" value={workspaceSearch} onChange={e => setWorkspaceSearch(e.target.value)} placeholder="Search inventory, documents, and channels…" className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-[hsl(var(--muted-foreground))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]" />
+          <Button type="submit" variant="ghost" size="sm">Search</Button>
+        </form>
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
 

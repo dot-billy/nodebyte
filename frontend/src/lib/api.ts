@@ -136,6 +136,8 @@ export interface RegistrationTokenCreated extends RegistrationTokenPublic {
 }
 
 export interface NodePublic {
+  summary: string | null;
+  source_name: string | null;
   document_created_at: string | null;
   document_updated_at: string | null;
   id: string;
@@ -166,6 +168,23 @@ export interface NodePublic {
 export interface TagCount {
   tag: string;
   count: number;
+}
+
+export interface CollectionPublic {
+  id: string;
+  team_id: string;
+  name: string;
+  description: string | null;
+  resource_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NodeListParams {
+  q?: string; scope?: "inventory" | "knowledge"; collection_id?: string;
+  parent_id?: string; limit?: number; offset?: number; kind?: string[];
+  has_url?: boolean; tags?: string[]; is_orphan?: boolean;
+  lifecycle_status?: string[]; stale_after_days?: number;
 }
 
 export interface NodeLastSeenStats {
@@ -412,6 +431,23 @@ export const api = {
       return request<void>(`/api/teams/${teamId}/registration-tokens/${tokenId}`, { method: "DELETE" });
     },
   },
+  collections: {
+    list(teamId: string, params: { node_id?: string; limit?: number; offset?: number } = {}) {
+      const qs = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) if (value !== undefined) qs.set(key, String(value));
+      return request<CollectionPublic[]>(`/api/teams/${teamId}/collections?${qs}`);
+    },
+    get(teamId: string, id: string) { return request<CollectionPublic>(`/api/teams/${teamId}/collections/${id}`); },
+    create(teamId: string, data: { name: string; description: string | null }) {
+      return request<CollectionPublic>(`/api/teams/${teamId}/collections`, { method: "POST", body: JSON.stringify(data) });
+    },
+    update(teamId: string, id: string, data: { name: string; description: string | null }) {
+      return request<CollectionPublic>(`/api/teams/${teamId}/collections/${id}`, { method: "PUT", body: JSON.stringify(data) });
+    },
+    delete(teamId: string, id: string) { return request<void>(`/api/teams/${teamId}/collections/${id}`, { method: "DELETE" }); },
+    addNode(teamId: string, id: string, nodeId: string) { return request<void>(`/api/teams/${teamId}/collections/${id}/nodes/${nodeId}`, { method: "PUT" }); },
+    removeNode(teamId: string, id: string, nodeId: string) { return request<void>(`/api/teams/${teamId}/collections/${id}/nodes/${nodeId}`, { method: "DELETE" }); },
+  },
   nodes: {
     count(teamId: string) {
       return request<{ count: number }>(`/api/teams/${teamId}/nodes/count`);
@@ -419,8 +455,10 @@ export const api = {
     stats(teamId: string) {
       return request<NodeStats>(`/api/teams/${teamId}/nodes/stats`);
     },
-    list(teamId: string, params?: { q?: string; parent_id?: string; limit?: number; offset?: number; kind?: string[]; has_url?: boolean; tags?: string[]; is_orphan?: boolean; lifecycle_status?: string[]; stale_after_days?: number }) {
+    list(teamId: string, params?: NodeListParams) {
       const qs = new URLSearchParams();
+      if (params?.scope) qs.set("scope", params.scope);
+      if (params?.collection_id) qs.set("collection_id", params.collection_id);
       if (params?.q) qs.set("q", params.q);
       if (params?.parent_id) qs.set("parent_id", params.parent_id);
       if (params?.limit) qs.set("limit", String(params.limit));
@@ -436,6 +474,15 @@ export const api = {
     },
     get(teamId: string, nodeId: string) {
       return request<NodePublic>(`/api/teams/${teamId}/nodes/${nodeId}`);
+    },
+    links(teamId: string, nodeId: string, params: { limit: number; offset: number }) {
+      return request<NodePublic[]>(`/api/teams/${teamId}/nodes/${nodeId}/links?limit=${params.limit}&offset=${params.offset}`);
+    },
+    link(teamId: string, nodeId: string, relatedId: string) {
+      return request<void>(`/api/teams/${teamId}/nodes/${nodeId}/links/${relatedId}`, { method: "PUT" });
+    },
+    unlink(teamId: string, nodeId: string, relatedId: string) {
+      return request<void>(`/api/teams/${teamId}/nodes/${nodeId}/links/${relatedId}`, { method: "DELETE" });
     },
     create(teamId: string, data: Partial<NodePublic>) {
       return request<NodePublic>(`/api/teams/${teamId}/nodes`, { method: "POST", body: JSON.stringify(data) });
