@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import uuid
 
-from sqlalchemy import and_, cast, delete as sa_delete, func, or_, select, text, update
+from sqlalchemy import Text, and_, cast, delete as sa_delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.models.node import Node
+from app.models.collection import CollectionNode
 from app.schemas.nodes import (
     IpSegmentCount,
     NodeLastSeenStats,
@@ -19,11 +20,16 @@ from app.schemas.nodes import (
 )
 
 
+KNOWLEDGE_KINDS = ("document", "channel", "link")
+
+
 async def list_nodes(
     db: AsyncSession,
     *,
     team_id: uuid.UUID,
     q: str | None = None,
+    scope: str | None = None,
+    collection_id: uuid.UUID | None = None,
     parent_id: uuid.UUID | None = None,
     kind: list[str] | None = None,
     has_url: bool | None = None,
@@ -42,6 +48,12 @@ async def list_nodes(
     )
     if parent_id is not None:
         stmt = stmt.where(Node.parent_node_id == parent_id)
+    if scope == "knowledge":
+        stmt = stmt.where(Node.kind.in_(KNOWLEDGE_KINDS))
+    elif scope == "inventory":
+        stmt = stmt.where(Node.kind.not_in(KNOWLEDGE_KINDS))
+    if collection_id is not None:
+        stmt = stmt.where(Node.id.in_(select(CollectionNode.node_id).where(CollectionNode.collection_id == collection_id)))
     if q:
         like = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -50,6 +62,10 @@ async def list_nodes(
                 Node.hostname.ilike(like),
                 Node.ip.ilike(like),
                 Node.url.ilike(like),
+                Node.summary.ilike(like),
+                Node.notes.ilike(like),
+                Node.source_name.ilike(like),
+                cast(Node.tags, Text).ilike(like),
             )
         )
     if kind:
@@ -292,7 +308,7 @@ async def bulk_update_tags(
 
 
 def _stale_condition(cutoff: datetime):
-    return or_(Node.last_seen_at.is_(None), Node.last_seen_at < cutoff)
+    return and_(Node.kind.not_in(KNOWLEDGE_KINDS), or_(Node.last_seen_at.is_(None), Node.last_seen_at < cutoff))
 
 
 def _review_due_condition(cutoff: datetime):

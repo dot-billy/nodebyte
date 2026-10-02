@@ -29,6 +29,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
   const [url, setUrl] = useState("");
   const [tags, setTags] = useState("");
   const [notes, setNotes] = useState("");
+  const [summary, setSummary] = useState("");
+  const [sourceName, setSourceName] = useState("");
   const [documentCreated, setDocumentCreated] = useState("");
   const [documentUpdated, setDocumentUpdated] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +57,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       setNotes("");
     }
     setError("");
+    setSummary(node?.summary ?? "");
+    setSourceName(node?.source_name ?? "");
     setDocumentCreated(toLocalDateInput(node?.document_created_at));
     setDocumentUpdated(toLocalDateInput(node?.document_updated_at));
   }, [node, open]);
@@ -96,6 +100,8 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
       url: url || null,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
       notes: notes || null,
+      summary: summary || null,
+      source_name: sourceName || null,
       document_created_at: documentDatePayload(documentCreated, node?.document_created_at),
       document_updated_at: documentDatePayload(documentUpdated, node?.document_updated_at),
     };
@@ -153,10 +159,19 @@ export function NodeDialog({ open, onOpenChange, node, teamId, onSaved }: NodeDi
                 <option value="workload">Workload</option>
                 <option value="ingress">Ingress</option>
                 <option value="other">Other</option>
+                <option value="document">Document</option>
+                <option value="channel">Channel</option>
+                <option value="link">Link</option>
               </select>
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="nd-summary">Summary</Label>
+            <textarea id="nd-summary" value={summary} onChange={e => setSummary(e.target.value)} maxLength={20000} rows={3} className="w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-sm" />
+            <Label htmlFor="nd-source">Source label</Label>
+            <Input id="nd-source" value={sourceName} onChange={e => setSourceName(e.target.value)} maxLength={120} placeholder="Google Docs, Slack, vendor docs…" />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="nd-hostname">Hostname</Label>

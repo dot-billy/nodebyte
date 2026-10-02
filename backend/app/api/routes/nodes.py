@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
@@ -25,6 +26,7 @@ from app.schemas.nodes import (
     StaleReviewQueue,
 )
 from app.services.ansible_inventory import build_ansible_inventory
+from app.services.collections import get_collection
 from app.services.audit import node_snapshot, record_audit_event
 from app.services.nodes import (
     apply_stale_review_decision,
@@ -69,6 +71,8 @@ async def nodes_stats(
 async def nodes_list(
     team_id: uuid.UUID,
     q: str | None = None,
+    scope: Literal["inventory", "knowledge"] | None = None,
+    collection_id: uuid.UUID | None = None,
     parent_id: uuid.UUID | None = Query(default=None),
     kind: list[str] | None = Query(default=None),
     has_url: bool | None = Query(default=None),
@@ -89,8 +93,10 @@ async def nodes_list(
     creating or updating a child. Results are paginated with `limit` and `offset`.
     """
     await require_role(db, user=user, team_id=team_id, min_role="viewer")
+    if collection_id is not None and await get_collection(db, team_id=team_id, collection_id=collection_id) is None:
+        raise HTTPException(404, "Collection not found")
     return await list_nodes(
-        db, team_id=team_id, q=q, parent_id=parent_id,
+        db, team_id=team_id, q=q, scope=scope, collection_id=collection_id, parent_id=parent_id,
         kind=kind, has_url=has_url, tags=tags, is_orphan=is_orphan,
         lifecycle_status=lifecycle_status, stale_after_days=stale_after_days,
         limit=limit, offset=offset,

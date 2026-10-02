@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { NodeChildrenTable, NodeDate } from "@/components/node-children-table";
 import { loadAllNodePages } from "@/lib/node-table";
+import { ResourceConnections } from "@/components/resource-details";
+import { useAuth } from "@/lib/auth";
 
 interface NodeDetailDialogProps {
   open: boolean;
@@ -336,6 +338,7 @@ const kindColors: Record<string, string> = {
 };
 
 export function NodeDetailDialog({ open, onOpenChange, node, onEdit, onView }: NodeDetailDialogProps) {
+  const { activeTeam } = useAuth();
   const [parentNode, setParentNode] = useState<NodePublic | null>(null);
   const [children, setChildren] = useState<NodePublic[]>([]);
   const [relLoading, setRelLoading] = useState(false);
@@ -413,6 +416,8 @@ export function NodeDetailDialog({ open, onOpenChange, node, onEdit, onView }: N
 
         {/* Body */}
         <div className="space-y-5 p-5">
+          {node.summary && <section><h3 className="mb-2 text-sm font-semibold">Summary</h3><p className="whitespace-pre-wrap text-sm">{node.summary}</p></section>}
+          <ResourceConnections key={node.id} node={node} canWrite={activeTeam?.id === node.team_id && ["owner", "admin", "member"].includes(activeTeam.my_role ?? "")} />
           {/* Connection details */}
           {(node.hostname || node.ip || node.url) && (
             <div className="rounded-lg border border-[hsl(var(--border))] p-4 space-y-3">

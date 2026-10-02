@@ -79,7 +79,7 @@ def _route_visibility(path: str, method: str, tags: list[str]) -> int:
         return VISIBILITY_LEVELS["viewer"] if method == "get" else VISIBILITY_LEVELS["admin"]
 
     # Node endpoints: read → viewer, write → member
-    if "/nodes" in path:
+    if "/nodes" in path or "/collections" in path:
         return VISIBILITY_LEVELS["viewer"] if method == "get" else VISIBILITY_LEVELS["member"]
 
     return VISIBILITY_LEVELS["authenticated"]

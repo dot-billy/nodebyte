@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     accountability,
+    collections,
     admin,
     api_tokens,
     auth,
@@ -18,6 +19,7 @@ api_router.include_router(auth.router)
 api_router.include_router(api_tokens.router)
 api_router.include_router(teams.router)
 api_router.include_router(nodes.router)
+api_router.include_router(collections.router)
 api_router.include_router(members.router)
 api_router.include_router(invites.router)
 api_router.include_router(registration_tokens.router)
