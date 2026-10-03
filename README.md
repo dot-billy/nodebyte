@@ -1,4 +1,4 @@
-# Nodebyte
+# NodeByte
 
 A digital inventory and knowledge library for individuals and teams. Track devices, sites, and services alongside documents, reference links, and channel directories. Connect related resources and organize them in optional collections.
 
@@ -8,9 +8,52 @@ A digital inventory and knowledge library for individuals and teams. Track devic
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
+## Inventory and knowledge, connected
+
+Keep the context you need alongside the systems you run. Save a recovery guide
+with its original URL, a short summary, and source dates, then link it to the
+server it describes. Open either resource to find the other.
+
+| View | What belongs here |
+|------|-------------------|
+| Inventory | Devices, sites, services, and infrastructure relationships. The table view retains bulk actions and child inventory tables. |
+| Knowledge | Documents, reference links, and channel directory entries, with summaries, notes, tags, and source metadata. |
+| Collections | Optional groups of resources for a home lab, project, environment, or customer engagement. |
+
+The shared search field searches the active team's saved names, summaries,
+notes, tags, source labels, and inventory fields. A resource can belong to
+several collections or stand alone. You do not need a customer or project to
+start gathering useful documentation.
+
+For example, a **Home lab** collection can hold a NAS, its backup guide, and
+networking notes. A platform team can group an API service with its recovery
+runbook. A delivery team can keep a solution design document and a Slack channel
+directory entry alongside the systems involved in a rollout.
+
+![A sample Home lab collection with documents beside a NAS and a related backup guide in its details panel](screenshots/knowledge-collections.png)
+
+*Sample data showing inventory and documentation in the same collection.*
+
+### Try the workflow
+
+1. Open **Knowledge → Add resource** and choose a document, link, or channel.
+2. Save its original URL, a summary, and any useful tags or notes. Enter source
+   creation and last-edited dates when you know them.
+3. Use **Related resources** in the details panel to connect it to a system or
+   another document. The link appears on both resources.
+4. Add it to a collection if you want a shared view of the related work, then
+   use the search field above the page to find it again.
+
+This release uses manual curation. Search covers the information saved in
+NodeByte; remote document contents, AI summaries, metadata synchronization, and
+Slack message indexing are not included. Source dates are entered manually and
+stay separate from the automatically maintained NodeByte record dates.
+
+See [Knowledge and collections](#knowledge-and-collections) for permissions,
+API endpoints, and upgrade instructions.
+
 ## Features
 
-- **Fast search** — find any node instantly by name, hostname, IP, URL, or tags
 - **Knowledge library** — curate document, link, and channel records with a summary, separate notes, source labels, tags, and source dates
 - **Flexible collections** — group resources around a home lab, project, environment, or customer; one resource can belong to several collections or none
 - **Related resources** — connect systems to runbooks, design documents, and channels with links visible from either resource
@@ -67,7 +110,7 @@ That's it. No local Python, Node.js, or PostgreSQL install required.
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-org/nodebyte.git
+git clone https://github.com/dot-billy/nodebyte.git
 cd nodebyte
 
 # 2. Copy the example env file and edit as needed
