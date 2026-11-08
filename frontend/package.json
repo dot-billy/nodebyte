@@ -16,7 +16,7 @@
     "class-variance-authority": "latest",
     "clsx": "latest",
     "lucide-react": "latest",
-    "next": "16.3.6",
+    "next": "16.4.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "tailwind-merge": "latest"
@@ -32,5 +32,10 @@
     "postcss": "8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    }
   }
 }
