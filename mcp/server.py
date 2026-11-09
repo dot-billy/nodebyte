@@ -1,6 +1,6 @@
 """Nodebyte MCP server.
 
-A FastMCP streamable-HTTP server that lets clients add, upload, list, and search nodes
+An MCPServer streamable-HTTP server that lets clients add, upload, list, and search nodes
 in a Nodebyte digital-inventory instance. It authenticates to the Nodebyte REST
 API with a revocable personal API token, so no user password is stored here.
 
@@ -28,8 +28,10 @@ from typing import Any
 
 import httpx
 import uvicorn
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
@@ -97,12 +99,9 @@ _security = TransportSecuritySettings(
     allowed_hosts=MCP_ALLOWED_HOSTS,
     allowed_origins=MCP_ALLOWED_ORIGINS,
 )
-mcp = FastMCP(
+mcp = MCPServer(
     "nodebyte",
     instructions=INSTRUCTIONS,
-    host=MCP_HOST,
-    port=PORT,
-    transport_security=_security,
 )
 
 _client = httpx.AsyncClient(
@@ -118,7 +117,7 @@ async def _req(method: str, path: str, *, params: dict | None = None, json: Any 
     """Call the Nodebyte API with the configured revocable personal token."""
     resp = await _client.request(method, path, params=params, json=json)
     if resp.status_code >= 400:
-        raise RuntimeError(f"nodebyte {method} {path} -> {resp.status_code}: {resp.text[:500]}")
+        raise ToolError(f"nodebyte {method} {path} -> {resp.status_code}: {resp.text[:500]}")
     if resp.status_code == 204:
         return None
     if resp.headers.get("content-type", "").startswith("application/json"):
@@ -134,7 +133,7 @@ async def _resolve_team(team_id: str | None) -> str:
         return _default_team_id
     teams = await _req("GET", "/api/teams")
     if not teams:
-        raise RuntimeError("service account belongs to no teams; create one in Nodebyte first")
+        raise ToolError("service account belongs to no teams; create one in Nodebyte first")
     _default_team_id = teams[0]["id"]
     return _default_team_id
 
@@ -397,11 +396,15 @@ class TokenAuth(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def main() -> None:
-    app = mcp.streamable_http_app()
+def create_app() -> Starlette:
+    app = mcp.streamable_http_app(transport_security=_security, host=MCP_HOST)
     app.add_middleware(TokenAuth)
     app.add_route("/healthz", lambda _req: PlainTextResponse("ok"), methods=["GET"])
-    uvicorn.run(app, host=MCP_HOST, port=PORT)
+    return app
+
+
+def main() -> None:
+    uvicorn.run(create_app(), host=MCP_HOST, port=PORT)
 
 
 if __name__ == "__main__":
