@@ -27,14 +27,20 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "eslint": "^9.20.0",
-    "eslint-config-next": "16.3.6",
+    "eslint": "^10.14.0",
+    "eslint-config-next": "16.4.5",
     "postcss": "8.5.32",
     "tailwindcss": "^4.3.4",
     "typescript": "^5.7.3"
   },
   "overrides": {
     "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    },
+    "@eslint/config-array": {
+      "minimatch": "11.0.1"
+    },
+    "eslint": {
       "minimatch": "11.0.1"
     }
   }
