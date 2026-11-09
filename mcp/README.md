@@ -4,7 +4,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for
 [Nodebyte](../README.md). It lets an MCP client (e.g. Claude) add, upload,
 list and search nodes in a Nodebyte instance over the REST API.
 
-It is a single-file [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
+It is a single-file [MCPServer (Python SDK 2)](https://github.com/modelcontextprotocol/python-sdk)
 server exposed over **streamable HTTP** on `127.0.0.1:8080` at `/mcp`. It
 authenticates to the Nodebyte backend with a revocable personal API token created
 from the Nodebyte Settings page. It never needs to store a user's password.

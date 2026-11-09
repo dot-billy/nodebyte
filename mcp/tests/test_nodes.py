@@ -52,16 +52,16 @@ class NodeToolsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_discovery_exposes_listing_and_relationship_arguments(self):
         tools = {tool.name: tool for tool in await server.mcp.list_tools()}
-        listing = tools["list_nodes"].inputSchema["properties"]
+        listing = tools["list_nodes"].input_schema["properties"]
         self.assertTrue({"parent_id", "is_orphan", "limit", "offset"} <= listing.keys())
         for name in ("add_node", "update_node"):
-            self.assertIn("parent_node_id", tools[name].inputSchema["properties"])
+            self.assertIn("parent_node_id", tools[name].input_schema["properties"])
 
     async def test_list_returns_ids_and_relationships_using_default_team(self):
         nodes = [{"id": "child-id", "parent_node_id": "parent-id", "name": "VM"}]
         self.responses = [(200, nodes)]
-        _, structured = await self.call("list_nodes")
-        self.assertEqual(structured, {"result": nodes})
+        result = await self.call("list_nodes")
+        self.assertEqual(result.structured_content, {"result": nodes})
         request = self.requests[0]
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.url.path, "/api/teams/team-a/nodes")
@@ -143,7 +143,7 @@ class NodeToolsTests(unittest.IsolatedAsyncioTestCase):
             {"name": "New VM", "parent_node_id": "parent-id"},
             {"name": "Existing VM", "parent_node_id": "parent-id"},
         ])
-        self.assertEqual(json.loads(content[0].text), {"created": 1, "updated": 1, "errors": []})
+        self.assertEqual(json.loads(content.content[0].text), {"created": 1, "updated": 1, "errors": []})
         for request in (self.requests[1], self.requests[3]):
             self.assertEqual(json.loads(request.content)["parent_node_id"], "parent-id")
 
