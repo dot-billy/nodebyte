@@ -36,6 +36,12 @@
   "overrides": {
     "@typescript-eslint/typescript-estree": {
       "minimatch": "11.0.1"
+    },
+    "@eslint/config-array": {
+      "minimatch": "11.0.1"
+    },
+    "eslint": {
+      "minimatch": "11.0.1"
     }
   }
 }
