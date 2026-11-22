@@ -29,7 +29,7 @@
     "@types/react-dom": "^19.3.0",
     "eslint": "^10.14.0",
     "eslint-config-next": "16.4.5",
-    "postcss": "8.5.32",
+    "postcss": "8.5.33",
     "tailwindcss": "^4.3.4",
     "typescript": "^5.7.3"
   },
